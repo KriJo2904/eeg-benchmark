@@ -1,0 +1,12 @@
+FROM node:20-bookworm-slim
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json ./
+# Lockfile musi być zsynchronizowany także dla linuxowych optional deps (npm ci w kontenerze ≠ sam macOS).
+RUN npm ci
+
+COPY frontend/docker-entrypoint-dev.sh /usr/local/bin/docker-entrypoint-dev.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint-dev.sh
+
+EXPOSE 5173
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint-dev.sh"]

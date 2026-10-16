@@ -1,0 +1,26 @@
+# ===== General =====
+.DS_Store
+*.log
+*.local
+
+# ===== Datasets / large files =====
+eegmmidb/
+
+# ===== Frontend (Vite/Node) =====
+node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Editor directories and files
+.vscode/
+.idea/
+
+# ===== Backend (C/C++) =====
+backend/build/
+backend/bin/
+backend/.cache/
+
+# ===== Wyniki benchmarków CLI (bench_analysis, bench_pipeline) =====
+bench_analysis.csv
+bench_results.csv
+erd_srednia.csv
