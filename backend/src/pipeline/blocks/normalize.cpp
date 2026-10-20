@@ -40,8 +40,8 @@ void minmax_inplace(std::vector<double>& v) {
 class NormalizeBlock final : public Block {
  public:
 
-  void process(const nlohmann::json& params, Signal& out) override {
-    const std::string method = params.value("method", std::string("zscore"));
+  void process(const BlockContext& ctx, Signal& out) override {
+    const std::string method = ctx.params.value("method", std::string("zscore"));
 
     for (auto& ch : out.channels) {
       if (method == "minmax") {
@@ -53,6 +53,6 @@ class NormalizeBlock final : public Block {
   }
 };
 
-EEG_REGISTER_BLOCK("normalize", NormalizeBlock)
+EEG_REGISTER_BLOCK("normalize", "processing", "Normalizacja", NormalizeBlock)
 
 }

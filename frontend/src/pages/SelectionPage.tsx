@@ -31,7 +31,8 @@ export function SelectionPage(props: { stan: WyborState }) {
           <span className="text-danger">Żeby policzyć analizę, trzeba jeszcze wybrać: {braki.join(', ')}.</span>
         ) : (
           <span className="text-muted">
-            Do analizy wejdzie <strong className="text-text">{liczbaRekordow}</strong> plików EDF.
+            Do analizy wejdzie <strong className="text-text">{liczbaRekordow}</strong> plików EDF. W każdym pliku
+            znajdujemy zdarzenia T0/T1/T2 i wycinamy wokół nich epoki: 1 s przed i 4 s po.
           </span>
         )}
         <span className="text-[11px] text-muted">

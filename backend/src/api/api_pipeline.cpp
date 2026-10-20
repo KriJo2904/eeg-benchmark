@@ -4,6 +4,7 @@
 #include "analysis/analysis.h"
 #include "analysis/benchmark.h"
 #include "analysis/selection.h"
+#include "pipeline/block.h"
 #include "pipeline/parallel_for.h"
 #include "pipeline/pipeline.h"
 #include "pipeline/project_store.h"
@@ -28,7 +29,6 @@ std::mutex g_run_mutex;
 
 struct PreparedAnalysis {
   eeg::pipeline::PipelineGraph graph;
-  eeg::analysis::AnalysisSettings settings;
   eeg::analysis::Selection selection;
   std::vector<eeg::analysis::RecordJob> jobs;
 };
@@ -40,16 +40,17 @@ PreparedAnalysis prepare(eeg::AppContext& ctx, const std::string& project_id,
 
   PreparedAnalysis p;
   p.graph = eeg::pipeline::parse_pipeline(data.pipeline);
-  p.settings = eeg::analysis::parse_settings(data.pipeline);
   p.selection = eeg::analysis::parse_selection(data.data_selection);
   p.jobs = eeg::analysis::resolve_records(p.selection, ctx.index, max_subjects);
   return p;
 }
 
 void stream_analysis(eeg::AppContext& ctx, const std::string& project_id, httplib::DataSink& sink) {
+  std::mutex sink_mutex;
   std::atomic<bool> cancel{false};
 
   auto send = [&](const std::string& event, const json& data) {
+    std::lock_guard<std::mutex> lock(sink_mutex);
     if (cancel) return;
     const auto frame = sse(event, data);
     if (!sink.write(frame.data(), frame.size())) cancel = true;
@@ -65,7 +66,7 @@ void stream_analysis(eeg::AppContext& ctx, const std::string& project_id, httpli
     opt.on_progress = [&](std::size_t done, std::size_t total) {
       send("progress", {{"done", done}, {"total", total}});
     };
-    const auto result = eeg::analysis::run_analysis(prepared.graph, prepared.settings, prepared.jobs,
+    const auto result = eeg::analysis::run_analysis(prepared.graph, prepared.jobs,
                                                     prepared.selection.channels, ctx.reader, opt);
 
     send("saving", json::object());
@@ -80,21 +81,18 @@ void stream_analysis(eeg::AppContext& ctx, const std::string& project_id, httpli
   }
 }
 
-json benchmark_json(eeg::AppContext& ctx, const std::string& project_id, std::size_t max_subjects,
-                    const std::vector<eeg::analysis::BenchVariant>& variants) {
+json benchmark_json(eeg::AppContext& ctx, const std::string& project_id, std::size_t max_subjects) {
   const auto prepared = prepare(ctx, project_id, max_subjects);
 
   std::lock_guard<std::mutex> lock(g_run_mutex);
-  const auto bench = eeg::analysis::run_benchmark(prepared.graph, prepared.settings, prepared.jobs,
-                                                  prepared.selection.channels, ctx.reader,
-                                                  variants);
+  const auto bench = eeg::analysis::run_benchmark(prepared.graph, prepared.jobs,
+                                                  prepared.selection.channels, ctx.reader);
 
   json runs = json::array();
-  for (const auto& r : bench.runs) {
-    runs.push_back({{"threads", r.threads}, {"repeats", r.repeats}, {"ms", r.ms}});
-  }
+  for (const auto& r : bench.runs) runs.push_back({{"threads", r.threads}, {"ms", r.ms}});
 
   return {{"hardwareConcurrency", bench.hardware_concurrency},
+          {"repeats", bench.repeats},
           {"subjects", bench.subjects},
           {"records", bench.records_used},
           {"epochs", bench.epochs},
@@ -105,8 +103,11 @@ json benchmark_json(eeg::AppContext& ctx, const std::string& project_id, std::si
 }
 
 void register_pipeline(httplib::Server& svr, eeg::AppContext& ctx) {
-  svr.Get("/api/bench/info", [](const httplib::Request&, httplib::Response& res) {
-    json_ok(res, json{{"hardwareConcurrency", eeg::pipeline::default_threads()}});
+  svr.Get("/api/pipeline/blocks", [](const httplib::Request&, httplib::Response& res) {
+    json arr = json::array();
+    for (const auto& d : eeg::pipeline::BlockRegistry::instance().all())
+      arr.push_back(json{{"kind", d.kind}, {"category", d.category}, {"title", d.title}});
+    json_ok(res, json{{"blocks", arr}});
   });
 
   svr.Get("/api/tasks", [](const httplib::Request&, httplib::Response& res) {
@@ -135,12 +136,9 @@ void register_pipeline(httplib::Server& svr, eeg::AppContext& ctx) {
              try {
                const std::size_t max_subjects =
                    req.has_param("maxSubjects") ? std::stoul(req.get_param_value("maxSubjects")) : 0;
-               const auto variants =
-                   req.has_param("runs")
-                       ? eeg::analysis::parse_bench_variants(req.get_param_value("runs"), 3)
-                       : eeg::analysis::default_bench_variants(3);
-               json_ok(res, benchmark_json(ctx, req.matches[1].str(), max_subjects, variants));
+               json_ok(res, benchmark_json(ctx, req.matches[1].str(), max_subjects));
              } catch (const std::exception& e) {
+               eeg::pipeline::set_max_threads(0);
                json_error(res, 400, e.what());
              }
            });

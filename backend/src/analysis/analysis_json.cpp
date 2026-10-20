@@ -145,6 +145,7 @@ json to_documents(const AnalysisResult& r, const Selection& sel) {
                   {"time", rounded(r.time_sec)},
                   {"freq", r.freq_hz},
                   {"band", {{"fMin", r.band_f_min}, {"fMax", r.band_f_max}}},
+                  {"hasMap", r.has_map},
                   {"tasks", tasks_json(sel)},
                   {"subjects", subject_ids},
                   {"average", average},

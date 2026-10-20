@@ -28,18 +28,31 @@ struct ChannelSpectrogram {
 struct Signal {
   std::vector<ChannelSeries> channels;
   std::vector<ChannelSpectrogram> spectrograms;
+
+  std::vector<std::vector<double>> band_power;
+
+  double map_f_min = 0.0;
+  double map_f_max = 0.0;
+};
+
+struct BlockContext {
+  std::string node_id;
+  std::string label;
+  nlohmann::json params = nlohmann::json::object();
 };
 
 class Block {
  public:
   virtual ~Block() = default;
-  virtual void process(const nlohmann::json& params, Signal& sig) = 0;
+  virtual void process(const BlockContext& ctx, Signal& sig) = 0;
 };
 
 using BlockFactory = std::function<std::unique_ptr<Block>()>;
 
 struct BlockDescriptor {
   std::string kind;
+  std::string category;
+  std::string title;
   BlockFactory factory;
 };
 
@@ -49,6 +62,7 @@ class BlockRegistry {
 
   void register_block(BlockDescriptor desc);
   std::unique_ptr<Block> create(const std::string& kind) const;
+  std::vector<BlockDescriptor> all() const;
 
  private:
   const BlockDescriptor* find(const std::string& kind) const;
@@ -61,10 +75,12 @@ struct BlockRegistrar {
   }
 };
 
-#define EEG_REGISTER_BLOCK(kind, BlockClass)                                      \
+#define EEG_REGISTER_BLOCK(kind, category, title, BlockClass)                     \
   namespace {                                                                     \
   const ::eeg::pipeline::BlockRegistrar eeg_block_registrar_##BlockClass{         \
       {(kind),                                                                    \
+       (category),                                                                \
+       (title),                                                                   \
        []() -> std::unique_ptr<::eeg::pipeline::Block> {                         \
          return std::make_unique<BlockClass>();                                   \
        }}};                                                                       \

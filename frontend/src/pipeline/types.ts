@@ -1,4 +1,4 @@
-export type BlockKind = 'lowpass' | 'fft' | 'normalize';
+export type BlockKind = 'lowpass' | 'fft' | 'normalize' | 'spektrogram' | 'band_power';
 
 export type LowpassParams = {
   cutoffHz: number;
@@ -14,10 +14,23 @@ export type NormalizeParams = {
   method: 'zscore' | 'minmax';
 };
 
+export type SpektrogramParams = {
+  fMin: number;
+  fMax: number;
+};
+
+export type BandPowerParams = {
+  fMin: number;
+  fMax: number;
+  agg: 'mean' | 'sum';
+};
+
 export type BlockParamsByKind = {
   lowpass: LowpassParams;
   fft: FftParams;
   normalize: NormalizeParams;
+  spektrogram: SpektrogramParams;
+  band_power: BandPowerParams;
 };
 
 export type PipelineNodeData =
@@ -43,4 +56,14 @@ export type PipelineNodeData =
       kind: 'normalize';
       label: string;
       params: NormalizeParams;
+    }
+  | {
+      kind: 'spektrogram';
+      label: string;
+      params: SpektrogramParams;
+    }
+  | {
+      kind: 'band_power';
+      label: string;
+      params: BandPowerParams;
     };

@@ -10,10 +10,7 @@ namespace eeg::pipeline {
 
 namespace {
 constexpr const char* kStartId = "start";
-bool is_skipped(const std::string& kind) {
-  return kind == "start" || kind == "end" || kind == "band_power" || kind == "spektrogram" ||
-         kind == "channel_select";
-}
+bool is_structural(const std::string& kind) { return kind == "start" || kind == "end"; }
 }
 
 PipelineGraph parse_pipeline(const nlohmann::json& j) {
@@ -81,27 +78,34 @@ PipelineRunResult run_pipeline(const PipelineGraph& g, Signal sig) {
 
   PipelineRunResult result;
 
+  auto pipeline_start = clock::now();
   for (const auto& id : execution_order(g)) {
     auto it = by_id.find(id);
     if (it == by_id.end()) continue;
     const GraphNode& node = *it->second;
 
     NodeRunResult nr;
+    nr.node_id = node.id;
     nr.kind = node.kind;
     nr.label = node.label;
 
     auto node_start = clock::now();
 
-    if (!is_skipped(node.kind)) {
-      std::unique_ptr<Block> block = reg.create(node.kind);
-      if (!block) throw std::runtime_error("Nieznany typ bloku: " + node.kind);
-      block->process(node.params, sig);
+    if (is_structural(node.kind)) {
+      nr.status = "skipped";
+    } else if (auto block = reg.create(node.kind)) {
+      BlockContext ctx{node.id, node.label, node.params};
+      block->process(ctx, sig);
+      nr.status = "ok";
+    } else {
+      nr.status = "unknown-kind";
     }
 
     nr.duration_ms = ms_since(node_start);
     result.nodes.push_back(std::move(nr));
   }
 
+  result.total_ms = ms_since(pipeline_start);
   result.output = std::move(sig);
   return result;
 }

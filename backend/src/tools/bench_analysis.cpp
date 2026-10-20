@@ -33,15 +33,18 @@ json default_pipeline() {
   nodes.push_back({{"id", "start"}, {"data", {{"kind", "start"}, {"label", "Start"}}}});
   nodes.push_back({{"id", "n1"}, {"data", {{"kind", "fft"}, {"label", "FFT"},
                                             {"params", {{"windowSize", 128}, {"overlap", 0.9}}}}}});
+  nodes.push_back({{"id", "n2"}, {"data", {{"kind", "spektrogram"}, {"label", "Spektrogram"},
+                                            {"params", {{"fMin", 4}, {"fMax", 40}}}}}});
+  nodes.push_back({{"id", "n3"}, {"data", {{"kind", "band_power"}, {"label", "Moc pasma"},
+                                            {"params", {{"fMin", 8}, {"fMax", 13}, {"agg", "mean"}}}}}});
   nodes.push_back({{"id", "end"}, {"data", {{"kind", "end"}, {"label", "Koniec"}}}});
 
   json edges = json::array();
-  const std::vector<std::string> order = {"start", "n1", "end"};
+  const std::vector<std::string> order = {"start", "n1", "n2", "n3", "end"};
   for (std::size_t i = 1; i < order.size(); ++i) {
     edges.push_back({{"source", order[i - 1]}, {"target", order[i]}});
   }
-  json analysis = {{"band", {{"fMin", 8}, {"fMax", 13}}}, {"map", {{"fMin", 4}, {"fMax", 40}}}};
-  return {{"version", 1}, {"nodes", nodes}, {"edges", edges}, {"analysis", analysis}};
+  return {{"version", 1}, {"nodes", nodes}, {"edges", edges}};
 }
 
 void parse_subjects(const std::string& arg, const std::vector<std::string>& all, Selection& sel) {
@@ -120,8 +123,7 @@ void write_erd_csv(const json& summary, const std::string& task) {
 int main(int argc, char** argv) {
   if (argc < 5) {
     std::cerr << "Uzycie: bench_analysis <katalog_eegmmidb> <badani> <zadanie> <elektrody> "
-                 "[powtorzenia=3] [warianty=1,2,4,N]\n"
-                 "  warianty: watki albo watki:powtorzenia, np. 1:5,2,4,10:7\n"
+                 "[powtorzenia=3]\n"
                  "  badani: all | S001-S010 | S001,S005   zadanie: wyobrazenie_lp ...   "
                  "elektrody: motor | all | C3,C4,Cz\n";
     return 2;
@@ -129,8 +131,6 @@ int main(int argc, char** argv) {
   const int repeats = (argc >= 6) ? std::stoi(argv[5]) : 3;
 
   try {
-    const auto variants = (argc >= 7) ? eeg::analysis::parse_bench_variants(argv[6], repeats)
-                                      : eeg::analysis::default_bench_variants(repeats);
     eeg::DatasetIndex index(argv[1]);
     index.scan();
     const auto all_subjects = index.list_subjects();
@@ -142,32 +142,28 @@ int main(int argc, char** argv) {
     sel.task_ids = {argv[3]};
     sel.channels = parse_channels(argv[4], reader, index.resolve_path(index.list_records().front().id));
 
-    const json pipeline = default_pipeline();
-    const auto graph = eeg::pipeline::parse_pipeline(pipeline);
-    const auto settings = eeg::analysis::parse_settings(pipeline);
+    const auto graph = eeg::pipeline::parse_pipeline(default_pipeline());
     const auto jobs = eeg::analysis::resolve_records(sel, index);
     std::cout << "rekordy: " << jobs.size() << ", elektrody: " << sel.channels.size()
               << ", zadanie: " << argv[3] << ", pipeline: FFT(128, 90%) -> moc pasma 8-13 Hz\n";
 
-    const auto bench =
-        eeg::analysis::run_benchmark(graph, settings, jobs, sel.channels, reader, variants);
+    const auto bench = eeg::analysis::run_benchmark(graph, jobs, sel.channels, reader, repeats);
     std::cout << "uzyte rekordy: " << bench.records_used << ", epoki: " << bench.epochs
-              << ", rdzenie: " << bench.hardware_concurrency << "\n";
+              << ", rdzenie: " << bench.hardware_concurrency << ", mediana z " << bench.repeats << "\n";
 
     std::ofstream csv("bench_analysis.csv");
-    csv << "threads,median_ms,speedup,efficiency,repeats\n";
+    csv << "threads,median_ms,speedup,efficiency\n";
     const double baseline_ms = bench.runs.front().ms;
     for (const auto& run : bench.runs) {
       const double speedup = baseline_ms / run.ms;
       const double efficiency = speedup / static_cast<double>(run.threads);
-      std::printf("watki: %2zu  przebiegi: %2d  mediana: %9.1f ms  speedup: %5.2fx  efektywnosc: %.2f\n",
-                  run.threads, run.repeats, run.ms, speedup, efficiency);
-      csv << run.threads << "," << run.ms << "," << speedup << "," << efficiency << "," << run.repeats
-          << "\n";
+      std::printf("watki: %2zu  czas: %9.1f ms  speedup: %5.2fx  efektywnosc: %.2f\n", run.threads,
+                  run.ms, speedup, efficiency);
+      csv << run.threads << "," << run.ms << "," << speedup << "," << efficiency << "\n";
     }
     std::cout << "zapisano bench_analysis.csv\n";
 
-    const auto result = eeg::analysis::run_analysis(graph, settings, jobs, sel.channels, reader);
+    const auto result = eeg::analysis::run_analysis(graph, jobs, sel.channels, reader);
     const json summary = eeg::analysis::to_documents(result, sel)["summary"];
     std::cout << "\nczas blokow pipeline'u (suma po epokach i watkach, " << result.threads << " watkow):";
     for (const auto& b : result.blocks) {

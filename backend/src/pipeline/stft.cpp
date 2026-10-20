@@ -53,8 +53,7 @@ void compute_frame(const ChannelSeries& ch, ChannelSpectrogram& spec, std::size_
 }
 
 std::vector<ChannelSpectrogram> compute_stft_all(const std::vector<ChannelSeries>& channels,
-                                                 int window_size, double overlap,
-                                                 std::size_t threads) {
+                                                 int window_size, double overlap) {
   window_size = std::max(2, window_size);
   overlap = std::clamp(overlap, 0.0, 0.95);
   const int step = std::max(1, static_cast<int>(std::round(window_size * (1.0 - overlap))));
@@ -69,7 +68,7 @@ std::vector<ChannelSpectrogram> compute_stft_all(const std::vector<ChannelSeries
     for (std::size_t f = 0; f < specs[c].time_sec.size(); ++f) tasks.push_back({c, f});
   }
 
-  parallel_for(tasks.size(), threads, [&](std::size_t i) {
+  parallel_for(tasks.size(), [&](std::size_t i) {
     const StftTask& t = tasks[i];
     compute_frame(channels[t.channel_idx], specs[t.channel_idx], t.frame_idx, step, window_fn,
                   fft);

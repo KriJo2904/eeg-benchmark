@@ -238,36 +238,24 @@ static std::string read_whole_file(const std::filesystem::path& path) {
   return bytes;
 }
 
-struct SignalLayout {
-  long long record_samples = 0;
-  long long offset = 0;
-  long long n_records = 0;
-};
-
-static SignalLayout signal_layout(const std::string& bytes, const EdfHeader& h, std::size_t idx) {
-  SignalLayout l;
-  for (std::size_t i = 0; i < h.signals.size(); ++i) {
-    if (i == idx) l.offset = l.record_samples;
-    l.record_samples += h.signals[i].samples_per_record;
-  }
-  l.n_records = h.n_records;
-  if (l.n_records <= 0) {
-    l.n_records = (static_cast<long long>(bytes.size()) - h.header_bytes) / (l.record_samples * 2);
-  }
-  return l;
-}
-
 static SignalWindow extract_channel(const std::string& bytes, const EdfHeader& h, std::size_t idx) {
-  const SignalLayout l = signal_layout(bytes, h, idx);
+  long long record_samples = 0, offset = 0;
+  for (std::size_t i = 0; i < h.signals.size(); ++i) {
+    if (i == idx) offset = record_samples;
+    record_samples += h.signals[i].samples_per_record;
+  }
+  long long n_records = h.n_records;
+  if (n_records <= 0) n_records = (static_cast<long long>(bytes.size()) - h.header_bytes) / (record_samples * 2);
+
   const auto& sig = h.signals[idx];
   const double gain = (sig.phys_max - sig.phys_min) / (sig.dig_max - sig.dig_min);
 
   SignalWindow w;
   w.channel_label = sig.label;
   w.sample_rate_hz = sig.samples_per_record / h.record_sec;
-  w.samples.reserve(static_cast<std::size_t>(l.n_records * sig.samples_per_record));
-  for (long long r = 0; r < l.n_records; ++r) {
-    const long long first = h.header_bytes + (r * l.record_samples + l.offset) * 2;
+  w.samples.reserve(static_cast<std::size_t>(n_records * sig.samples_per_record));
+  for (long long r = 0; r < n_records; ++r) {
+    const long long first = h.header_bytes + (r * record_samples + offset) * 2;
     for (int k = 0; k < sig.samples_per_record; ++k) {
       const std::size_t p = static_cast<std::size_t>(first + k * 2);
       if (p + 1 >= bytes.size()) return w;
@@ -280,69 +268,12 @@ static SignalWindow extract_channel(const std::string& bytes, const EdfHeader& h
   return w;
 }
 
-static void parse_tal(const std::string& tal, std::vector<Event>& out) {
-  const char kTextSep = 20;
-  const char kDurationSep = 21;
-
-  const std::size_t first_text = tal.find(kTextSep);
-  if (first_text == std::string::npos) return;
-
-  std::string onset = tal.substr(0, first_text);
-  std::string duration;
-  const std::size_t d = onset.find(kDurationSep);
-  if (d != std::string::npos) {
-    duration = onset.substr(d + 1);
-    onset = onset.substr(0, d);
-  }
-
-  std::size_t p = first_text + 1;
-  while (p < tal.size()) {
-    std::size_t q = tal.find(kTextSep, p);
-    if (q == std::string::npos) q = tal.size();
-    const std::string text = tal.substr(p, q - p);
-    if (!text.empty()) {
-      Event e;
-      e.onset_sec = std::stod(onset);
-      e.duration_sec = duration.empty() ? 0.0 : std::stod(duration);
-      e.description = text;
-      out.push_back(e);
-    }
-    p = q + 1;
-  }
-}
-
-static std::vector<Event> extract_events(const std::string& bytes, const EdfHeader& h) {
-  std::vector<Event> events;
-  for (std::size_t idx = 0; idx < h.signals.size(); ++idx) {
-    if (h.signals[idx].label != "EDF Annotations") continue;
-
-    const SignalLayout l = signal_layout(bytes, h, idx);
-    const std::size_t block_bytes = static_cast<std::size_t>(h.signals[idx].samples_per_record) * 2;
-    for (long long r = 0; r < l.n_records; ++r) {
-      const std::size_t first =
-          static_cast<std::size_t>(h.header_bytes + (r * l.record_samples + l.offset) * 2);
-      if (first + block_bytes > bytes.size()) break;
-      const std::string block = bytes.substr(first, block_bytes);
-
-      std::size_t p = 0;
-      while (p < block.size()) {
-        std::size_t end = block.find('\0', p);
-        if (end == std::string::npos) end = block.size();
-        if (end > p) parse_tal(block.substr(p, end - p), events);
-        p = end + 1;
-      }
-    }
-  }
-  return events;
-}
-
-EdfRecord EdfReader::read_record(const std::filesystem::path& path,
-                                 const std::vector<std::string>& channel_names) const {
+std::vector<SignalWindow> EdfReader::read_channels(const std::filesystem::path& path,
+                                                   const std::vector<std::string>& channel_names) const {
   const std::string bytes = read_whole_file(path);
   const EdfHeader header = parse_edf_header(bytes);
 
-  EdfRecord result;
-  result.events = extract_events(bytes, header);
+  std::vector<SignalWindow> result;
   for (const auto& name : channel_names) {
     std::size_t idx = header.signals.size();
     for (std::size_t i = 0; i < header.signals.size(); ++i) {
@@ -352,7 +283,7 @@ EdfRecord EdfReader::read_record(const std::filesystem::path& path,
 
     SignalWindow w = extract_channel(bytes, header, idx);
     w.channel_label = name;
-    result.signals.push_back(std::move(w));
+    result.push_back(std::move(w));
   }
   return result;
 }

@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Lista } from '../components/Lista';
 import { useAnaliza } from '../hooks/useAnaliza';
+import type { WyborState } from '../hooks/useWyborAnalizy';
 import { getAnalysisSubject } from '../projectsApi';
 import type { WynikBadanego } from '../results/analizaTypes';
 import { KrzyweErd } from '../results/KrzyweErd';
 import { MapaErdPanel } from '../results/MapaErdPanel';
 import { PanelAnalizy } from '../results/PanelAnalizy';
 
-export function ResultsPage(props: { projectId: string }) {
-  const { projectId } = props;
+export function ResultsPage(props: { projectId: string; wybor: WyborState }) {
+  const { projectId, wybor } = props;
   const analiza = useAnaliza(projectId);
   const wynik = analiza.wynik;
 
@@ -22,11 +23,13 @@ export function ResultsPage(props: { projectId: string }) {
 
   return (
     <div className="space-y-4">
-      <PanelAnalizy analiza={analiza} projectId={projectId} />
+      <PanelAnalizy analiza={analiza} projectId={projectId} liczbaRekordow={wybor.liczbaRekordow} />
 
       {!wynik ? (
         <div className="border border-border bg-surface px-4 py-6 text-xs text-muted">
-          Brak wyniku analizy.
+          W tym projekcie nie ma jeszcze wyniku. Najpierw zakładka <strong>Selekcja</strong> (badani, zadania,
+          elektrody), potem <strong>Pipeline</strong> (musi być w nim STFT i moc pasma), na końcu przycisk{' '}
+          <strong>Uruchom analizę</strong> powyżej.
         </div>
       ) : zadanie ? (
         <>
@@ -36,6 +39,10 @@ export function ResultsPage(props: { projectId: string }) {
                 <h2 className="text-sm font-semibold text-text">
                   Moc pasma {wynik.band.fMin}–{wynik.band.fMax} Hz w czasie (ERD %)
                 </h2>
+                <p className="text-[11px] text-muted">
+                  Zdarzenie zaczyna się w chwili 0. Każdy punkt to moc pasma w procentach względem sekundy przed
+                  zdarzeniem. Poniżej zera znaczy, że moc spadła (ERD), powyżej, że wzrosła (ERS).
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Lista
@@ -55,7 +62,14 @@ export function ResultsPage(props: { projectId: string }) {
             <KrzyweErd wynik={wynik} zadanie={zadanie} dane={dane} />
           </div>
 
-          <MapaErdPanel projectId={projectId} wynik={wynik} zadanie={zadanie} wersja={analiza.utworzono} />
+          {wynik.hasMap ? (
+            <MapaErdPanel projectId={projectId} wynik={wynik} zadanie={zadanie} wersja={analiza.utworzono} />
+          ) : (
+            <div className="border border-border bg-surface px-4 py-3 text-xs text-muted">
+              Mapy czas × częstotliwość tu nie ma, bo w pipeline brakuje bloku <strong>Spektrogram</strong>.
+              Jeśli chcesz ją zobaczyć, dodaj go i uruchom analizę jeszcze raz.
+            </div>
+          )}
         </>
       ) : null}
     </div>

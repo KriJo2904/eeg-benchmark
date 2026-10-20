@@ -103,6 +103,9 @@ export function ControlsPanel(props: {
               </option>
             ))}
           </select>
+          <p className="mt-2 text-[11px] leading-snug text-muted">
+            To tylko podgląd jednej elektrody. Elektrody do analizy wybiera się w zakładce <strong>Selekcja</strong>.
+          </p>
         </div>
       ) : null}
 

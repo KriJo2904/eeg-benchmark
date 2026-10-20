@@ -5,11 +5,10 @@
 
 namespace eeg::pipeline {
 
-std::size_t default_threads();
+void set_max_threads(std::size_t n);
 
-std::size_t range_begin(std::size_t count, std::size_t n_parts, std::size_t part);
+std::size_t get_max_threads();
 
-void parallel_for(std::size_t count, std::size_t n_threads,
-                  const std::function<void(std::size_t)>& fn);
+void parallel_for(std::size_t count, const std::function<void(std::size_t)>& fn);
 
 }

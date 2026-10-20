@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,7 @@ class DatasetIndex {
   std::filesystem::path resolve_path(const std::string& id) const;
 
  private:
+  mutable std::mutex mu_;
   std::filesystem::path root_;
   std::vector<std::string> records_;
 };

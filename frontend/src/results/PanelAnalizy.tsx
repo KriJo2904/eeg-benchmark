@@ -2,8 +2,8 @@ import { useState } from 'react';
 import type { AnalizaState } from '../hooks/useAnaliza';
 import { analysisCsvUrl } from '../projectsApi';
 
-export function PanelAnalizy(props: { analiza: AnalizaState; projectId: string }) {
-  const { analiza, projectId } = props;
+export function PanelAnalizy(props: { analiza: AnalizaState; projectId: string; liczbaRekordow: number }) {
+  const { analiza, projectId, liczbaRekordow } = props;
   const { faza, postep, uplynelo, wynik } = analiza;
   const trwa = faza !== 'bezczynna';
   const procent = postep.wszystkie > 0 ? (100 * postep.gotowe) / postep.wszystkie : 0;
@@ -13,12 +13,17 @@ export function PanelAnalizy(props: { analiza: AnalizaState; projectId: string }
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-text">Analiza</h2>
+          <p className="text-[11px] text-muted">
+            Wczytuje {liczbaRekordow} plików EDF z Selekcji, w każdym wycina epoki wokół zdarzeń, na każdej epoce
+            liczy pipeline i uśrednia moc pasma. Pliki liczone są równolegle, po jednym na wątek.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {wynik && !trwa ? (
             <a
               href={analysisCsvUrl(projectId)}
               className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg"
+              title="Jeden wiersz = badany, zadanie, zdarzenie, elektroda, czas, ERD %"
             >
               Eksport CSV
             </a>
@@ -88,7 +93,10 @@ function Statystyki({ analiza }: { analiza: AnalizaState }) {
       </dl>
 
       <div>
-        <div className="mb-1 text-muted">Czas bloków (suma po epokach)</div>
+        <div className="mb-1 text-muted">
+          Ile czasu zajął każdy blok, zsumowane po wszystkich epokach. Suma może być większa niż czas analizy,
+          bo {s.threads} wątków liczyło bloki jednocześnie.
+        </div>
         <table className="w-full">
           <tbody>
             {s.blocks.map((b, i) => (

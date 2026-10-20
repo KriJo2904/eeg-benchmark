@@ -14,15 +14,6 @@ namespace eeg::analysis {
 
 constexpr double kSampleRateHz = 160.0;
 
-struct AnalysisSettings {
-  double band_f_min = 8.0;
-  double band_f_max = 13.0;
-  double map_f_min = 4.0;
-  double map_f_max = 40.0;
-};
-
-AnalysisSettings parse_settings(const nlohmann::json& pipeline);
-
 struct CurveSum {
   std::vector<std::vector<double>> power;
   std::size_t epochs = 0;
@@ -46,6 +37,7 @@ struct AnalysisResult {
   std::vector<double> freq_hz;
   double band_f_min = 0.0;
   double band_f_max = 0.0;
+  bool has_map = false;
 
   std::map<std::string, CurveSum> curves;
   std::map<std::string, MapSum> maps;
@@ -60,13 +52,11 @@ struct AnalysisResult {
 };
 
 struct AnalysisOptions {
-  std::size_t threads = 0;
   std::function<void(std::size_t, std::size_t)> on_progress;
   std::atomic<bool>* cancel = nullptr;
 };
 
 AnalysisResult run_analysis(const eeg::pipeline::PipelineGraph& graph,
-                            const AnalysisSettings& settings,
                             const std::vector<RecordJob>& jobs,
                             const std::vector<std::string>& channels, const EdfReader& reader,
                             const AnalysisOptions& opt = {});

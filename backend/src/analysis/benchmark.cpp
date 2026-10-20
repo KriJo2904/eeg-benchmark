@@ -3,8 +3,7 @@
 #include "pipeline/parallel_for.h"
 
 #include <algorithm>
-#include <sstream>
-#include <stdexcept>
+#include <thread>
 
 namespace eeg::analysis {
 
@@ -24,91 +23,46 @@ std::size_t count_subjects(const std::vector<RecordJob>& jobs) {
   return n;
 }
 
-double measure_ms(const eeg::pipeline::PipelineGraph& graph, const AnalysisSettings& settings,
-                  const std::vector<RecordJob>& jobs,
+double measure_ms(const eeg::pipeline::PipelineGraph& graph, const std::vector<RecordJob>& jobs,
                   const std::vector<std::string>& channels, const EdfReader& reader,
                   std::size_t threads, int repeats) {
-  AnalysisOptions opt;
-  opt.threads = threads;
+  eeg::pipeline::set_max_threads(threads);
   std::vector<double> times;
   for (int r = 0; r < repeats; ++r) {
-    times.push_back(run_analysis(graph, settings, jobs, channels, reader, opt).total_ms);
+    times.push_back(run_analysis(graph, jobs, channels, reader).total_ms);
   }
   return median(times);
 }
 
-std::size_t parse_number(const std::string& text, std::size_t max, const std::string& what) {
-  const bool digits = !text.empty() && text.size() <= 4 &&
-                      text.find_first_not_of("0123456789") == std::string::npos;
-  const std::size_t n = digits ? std::stoul(text) : 0;
-  if (n < 1 || n > max) {
-    throw std::runtime_error("Nieprawidłowa liczba " + what + ": " + text + " (dozwolone od 1 do " +
-                             std::to_string(max) + ").");
-  }
-  return n;
 }
 
-bool by_threads(const BenchVariant& a, const BenchVariant& b) { return a.threads < b.threads; }
-
-}
-
-std::vector<BenchVariant> default_bench_variants(int repeats) {
-  std::vector<BenchVariant> variants = {{1, repeats}, {2, repeats}, {4, repeats}};
-  const std::size_t hw = eeg::pipeline::default_threads();
-  if (hw != 1 && hw != 2 && hw != 4) variants.push_back({hw, repeats});
-  std::sort(variants.begin(), variants.end(), by_threads);
-  return variants;
-}
-
-std::vector<BenchVariant> parse_bench_variants(const std::string& text, int default_repeats) {
-  std::vector<BenchVariant> variants;
-  bool has_one = false;
-  std::stringstream in(text);
-  std::string item;
-  while (std::getline(in, item, ',')) {
-    item.erase(std::remove(item.begin(), item.end(), ' '), item.end());
-    if (item.empty()) continue;
-
-    BenchVariant v;
-    v.repeats = default_repeats;
-    const std::size_t colon = item.find(':');
-    if (colon == std::string::npos) {
-      v.threads = parse_number(item, kMaxThreads, "wątków");
-    } else {
-      v.threads = parse_number(item.substr(0, colon), kMaxThreads, "wątków");
-      v.repeats = static_cast<int>(parse_number(item.substr(colon + 1), kMaxRepeats, "przebiegów"));
-    }
-
-    for (const BenchVariant& other : variants) {
-      if (other.threads == v.threads) {
-        throw std::runtime_error("Wariant " + std::to_string(v.threads) + " wątków jest wpisany dwa razy.");
-      }
-    }
-    if (v.threads == 1) has_one = true;
-    variants.push_back(v);
-  }
-  if (!has_one) variants.push_back({1, default_repeats});
-  std::sort(variants.begin(), variants.end(), by_threads);
-  return variants;
+std::vector<std::size_t> bench_thread_counts() {
+  const std::size_t hw = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+  std::vector<std::size_t> counts = {1, 2, 4, hw};
+  std::sort(counts.begin(), counts.end());
+  counts.erase(std::unique(counts.begin(), counts.end()), counts.end());
+  return counts;
 }
 
 BenchResult run_benchmark(const eeg::pipeline::PipelineGraph& graph,
-                          const AnalysisSettings& settings, const std::vector<RecordJob>& jobs,
+                          const std::vector<RecordJob>& jobs,
                           const std::vector<std::string>& channels, const EdfReader& reader,
-                          const std::vector<BenchVariant>& variants) {
+                          int repeats) {
   BenchResult result;
-  result.hardware_concurrency = eeg::pipeline::default_threads();
+  result.hardware_concurrency = std::max<std::size_t>(1, std::thread::hardware_concurrency());
+  result.repeats = std::max(1, repeats);
   result.subjects = count_subjects(jobs);
 
-  const AnalysisResult warmup = run_analysis(graph, settings, jobs, channels, reader);
+  eeg::pipeline::set_max_threads(0);
+  const AnalysisResult warmup = run_analysis(graph, jobs, channels, reader);
   result.records_used = warmup.records_used;
   result.epochs = warmup.epochs;
 
-  for (const BenchVariant& v : variants) {
-    const int repeats = std::clamp(v.repeats, 1, kMaxRepeats);
-    result.runs.push_back({v.threads, repeats,
-                           measure_ms(graph, settings, jobs, channels, reader, v.threads, repeats)});
+  for (std::size_t t : bench_thread_counts()) {
+    result.runs.push_back({t, measure_ms(graph, jobs, channels, reader, t, result.repeats)});
   }
+
+  eeg::pipeline::set_max_threads(0);
   return result;
 }
 

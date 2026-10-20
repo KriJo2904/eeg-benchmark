@@ -123,6 +123,7 @@ export function ProjectsPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && onCreate()}
+                placeholder="np. wyobrażenie ruchu, pasmo alfa"
                 disabled={creating}
               />
               <button

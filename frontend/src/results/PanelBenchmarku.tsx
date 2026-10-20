@@ -1,34 +1,26 @@
 import { useEffect, useState } from 'react';
-import {
-  pobierzLiczbeRdzeni,
-  uruchomBenchmark,
-  type BenchPunkt,
-  type BenchWynik,
-  type WariantBenchmarku,
-} from '../api';
+import { uruchomBenchmark, type BenchPunkt, type BenchWynik } from '../api';
 import { Lista } from '../components/Lista';
 
 const WYKRES_H = 180;
 const SLUPEK_W = 60;
 const SLUPEK_GAP = 24;
 
-type Wiersz = { threads: number; repeats: number; ms: number; speedup: number; efficiency: number };
-
-const DOMYSLNE_PRZEBIEGI = 3;
+type Wiersz = { threads: number; ms: number; speedup: number; efficiency: number };
 
 function policzWiersze(runs: BenchPunkt[]): Wiersz[] {
   const bazowy = runs.find((r) => r.threads === 1)?.ms ?? runs[0]?.ms ?? 0;
   return runs.map((r) => {
     const speedup = r.ms > 0 ? bazowy / r.ms : 0;
-    return { threads: r.threads, repeats: r.repeats, ms: r.ms, speedup, efficiency: speedup / r.threads };
+    return { threads: r.threads, ms: r.ms, speedup, efficiency: speedup / r.threads };
   });
 }
 
 function zbudujCsv(wynik: BenchWynik, wiersze: Wiersz[]): string {
-  const naglowek = 'threads,median_ms,speedup,efficiency,repeats,subjects,records,epochs,channels,cores\n';
+  const naglowek = 'threads,median_ms,speedup,efficiency,subjects,records,epochs,channels,cores,repeats\n';
   const linie = wiersze.map((w) =>
-    [w.threads, w.ms.toFixed(1), w.speedup.toFixed(3), w.efficiency.toFixed(3), w.repeats, wynik.subjects,
-      wynik.records, wynik.epochs, wynik.channels, wynik.hardwareConcurrency].join(','),
+    [w.threads, w.ms.toFixed(1), w.speedup.toFixed(3), w.efficiency.toFixed(3), wynik.subjects, wynik.records,
+      wynik.epochs, wynik.channels, wynik.hardwareConcurrency, wynik.repeats].join(','),
   );
   return naglowek + linie.join('\n') + '\n';
 }
@@ -48,22 +40,7 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
   const [liczy, setLiczy] = useState(false);
   const [blad, setBlad] = useState<string | null>(null);
   const [maxBadanych, setMaxBadanych] = useState('0');
-  const [warianty, setWarianty] = useState<WariantBenchmarku[]>([
-    { watki: 1, przebiegi: DOMYSLNE_PRZEBIEGI },
-    { watki: 2, przebiegi: DOMYSLNE_PRZEBIEGI },
-    { watki: 4, przebiegi: DOMYSLNE_PRZEBIEGI },
-  ]);
-  const [rdzenie, setRdzenie] = useState<number | null>(null);
   const [sekundy, setSekundy] = useState(0);
-
-  useEffect(() => {
-    pobierzLiczbeRdzeni()
-      .then((n) => {
-        setRdzenie(n);
-        setWarianty((w) => (w.some((x) => x.watki === n) ? w : [...w, { watki: n, przebiegi: DOMYSLNE_PRZEBIEGI }]));
-      })
-      .catch(() => setRdzenie(null));
-  }, []);
 
   useEffect(() => {
     if (!liczy) return;
@@ -82,7 +59,7 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
     setBlad(null);
     setSekundy(0);
     try {
-      setWynik(await uruchomBenchmark(projectId, Number(maxBadanych), warianty));
+      setWynik(await uruchomBenchmark(projectId, Number(maxBadanych)));
     } catch (e: unknown) {
       setBlad(e instanceof Error ? e.message : String(e));
     } finally {
@@ -98,14 +75,20 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-text">Sekwencyjnie czy współbieżnie</h2>
+          <p className="text-[11px] text-muted">
+            Ta sama analiza co w Wynikach, tylko bez zapisu, puszczona kolejno na 1, 2, 4 i wszystkich wątkach
+            procesora. Każdy wariant mierzony 3 razy, w tabeli jest mediana. Pierwszy, nieliczony przebieg wczytuje
+            pliki do pamięci podręcznej, żeby odczyt z dysku nie faworyzował późniejszych wariantów.
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Lista etykieta="Dane" value={maxBadanych} opcje={opcje} onChange={setMaxBadanych} />
           {wynik && !liczy ? (
             <button
               type="button"
               onClick={() => pobierzPlik(`benchmark_${projectId}.csv`, zbudujCsv(wynik, wiersze))}
               className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg"
+              title="Te same kolumny co z narzędzia bench_analysis w konsoli"
             >
               Pobierz CSV
             </button>
@@ -121,8 +104,6 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
         </div>
       </div>
 
-      <EdytorWariantow warianty={warianty} rdzenie={rdzenie} zablokowany={liczy} onChange={setWarianty} />
-
       {blad ? <div className="bg-rose-50 px-4 py-2 text-[11px] text-rose-700">Błąd: {blad}</div> : null}
 
       {wynik && najlepszy ? (
@@ -134,7 +115,7 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
             <div className="mt-1 text-[11px] text-muted">
               {(wiersze[0].ms / 1000).toFixed(2)} s na 1 wątku → {(najlepszy.ms / 1000).toFixed(2)} s na {najlepszy.threads} wątkach
               {' '}· {wynik.subjects} badanych · {wynik.records} rekordów · {wynik.epochs} epok · {wynik.channels} elektrod
-              {' '}· rdzenie w serwerze: <strong>{wynik.hardwareConcurrency}</strong>
+              {' '}· rdzenie w serwerze: <strong>{wynik.hardwareConcurrency}</strong> · mediana z {wynik.repeats} pomiarów
             </div>
           </div>
 
@@ -153,17 +134,15 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
             <thead>
               <tr className="border-b border-border text-left text-muted">
                 <th className="px-2 py-1.5 font-medium">Wątki</th>
-                <th className="px-2 py-1.5 font-medium">Przebiegi</th>
-                <th className="px-2 py-1.5 font-medium">Czas [ms], mediana</th>
-                <th className="px-2 py-1.5 font-medium">Przyspieszenie</th>
-                <th className="px-2 py-1.5 font-medium">Efektywność</th>
+                <th className="px-2 py-1.5 font-medium">Czas [ms]</th>
+                <th className="px-2 py-1.5 font-medium" title="czas na 1 wątku / czas na N wątkach">Przyspieszenie</th>
+                <th className="px-2 py-1.5 font-medium" title="przyspieszenie / liczba wątków (1,0 = idealnie)">Efektywność</th>
               </tr>
             </thead>
             <tbody>
               {wiersze.map((w) => (
                 <tr key={w.threads} className="border-b border-border/60 font-mono text-text">
                   <td className="px-2 py-1.5">{w.threads === 1 ? '1 (sekwencyjnie)' : w.threads}</td>
-                  <td className="px-2 py-1.5">{w.repeats}</td>
                   <td className="px-2 py-1.5">{w.ms.toFixed(1)}</td>
                   <td className="px-2 py-1.5">{w.speedup.toFixed(2)}×</td>
                   <td className="px-2 py-1.5">{w.efficiency.toFixed(2)}</td>
@@ -172,95 +151,19 @@ export function PanelBenchmarku(props: { projectId: string; liczbaBadanych: numb
             </tbody>
           </table>
 
+          <p className="text-[11px] text-muted">
+            Jak to działa: lista plików EDF trafia do kolejki, a każdy wątek bierze z niej kolejny plik, wczytuje go,
+            wycina epoki i liczy na nich pipeline. Wariant „1 wątek” to zwykła pętla po plikach, bez kolejki i bez
+            wątków. Przyspieszenie jest mniejsze niż liczba wątków, bo wątki konkurują o pamięć, wyniki scalane są
+            pod jedną blokadą, a na procesorach Apple część rdzeni to wolniejsze rdzenie energooszczędne.
+          </p>
         </div>
       ) : !liczy && !blad ? (
         <div className="px-4 py-6 text-xs text-muted">
-          Brak wyniku benchmarku.
+          Wybierz, na ilu badanych mierzyć, i kliknij <strong>Uruchom benchmark</strong>. Na 10 badanych
+          to kilka sekund, na całym zbiorze z wieloma elektrodami nawet kilka minut (4 warianty razy 3 powtórzenia).
         </div>
       ) : null}
-    </div>
-  );
-}
-
-const MAX_WATKOW = 1024;
-const MAX_PRZEBIEGOW = 20;
-
-function EdytorWariantow(props: {
-  warianty: WariantBenchmarku[];
-  rdzenie: number | null;
-  zablokowany: boolean;
-  onChange: (w: WariantBenchmarku[]) => void;
-}) {
-  const { warianty, rdzenie, zablokowany, onChange } = props;
-  const pole =
-    'w-16 border border-border bg-surface px-2 py-1 text-xs text-text outline-none focus:border-accent disabled:opacity-45';
-
-  function zmien(i: number, zmiana: Partial<WariantBenchmarku>) {
-    onChange(warianty.map((w, j) => (j === i ? { ...w, ...zmiana } : w)));
-  }
-
-  function dodaj() {
-    const ostatni = warianty[warianty.length - 1];
-    const watki = Math.min(MAX_WATKOW, (ostatni?.watki ?? 1) * 2);
-    onChange([...warianty, { watki, przebiegi: ostatni?.przebiegi ?? DOMYSLNE_PRZEBIEGI }]);
-  }
-
-  return (
-    <div className="border-b border-border px-4 py-3">
-      <div className="mb-2 text-[11px] font-medium text-muted">
-        Warianty{rdzenie ? ` · rdzenie w serwerze: ${rdzenie}` : ''}
-      </div>
-      <div className="flex flex-col gap-1.5">
-        {warianty.map((w, i) => (
-          <div key={i} className="flex items-center gap-3 text-xs text-muted">
-            <label className="flex items-center gap-1.5">
-              Wątki
-              <input
-                type="number"
-                min={1}
-                max={MAX_WATKOW}
-                value={w.watki}
-                disabled={zablokowany || i === 0}
-                onChange={(e) => zmien(i, { watki: Number(e.target.value) })}
-                className={pole}
-              />
-            </label>
-            <label className="flex items-center gap-1.5">
-              Przebiegi
-              <input
-                type="number"
-                min={1}
-                max={MAX_PRZEBIEGOW}
-                value={w.przebiegi}
-                disabled={zablokowany}
-                onChange={(e) => zmien(i, { przebiegi: Number(e.target.value) })}
-                className={pole}
-              />
-            </label>
-            {i === 0 ? (
-              <span>sekwencyjnie</span>
-            ) : (
-              <button
-                type="button"
-                disabled={zablokowany}
-                onClick={() => onChange(warianty.filter((_, j) => j !== i))}
-                className="px-1 text-muted hover:text-text disabled:opacity-45"
-                aria-label="Usuń wariant"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        disabled={zablokowany}
-        onClick={dodaj}
-        className="mt-2 border border-border bg-surface px-3 py-1 text-xs font-medium text-text hover:bg-bg disabled:opacity-45"
-      >
-        + Dodaj wariant
-      </button>
     </div>
   );
 }

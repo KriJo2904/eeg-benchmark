@@ -53,10 +53,11 @@ export async function listTasks(): Promise<{ tasks: TypZadania[] }> {
   return http<{ tasks: TypZadania[] }>(`/api/tasks`);
 }
 
-export type BenchPunkt = { threads: number; repeats: number; ms: number };
+export type BenchPunkt = { threads: number; ms: number };
 
 export type BenchWynik = {
   hardwareConcurrency: number;
+  repeats: number;
   subjects: number;
   records: number;
   epochs: number;
@@ -64,21 +65,8 @@ export type BenchWynik = {
   runs: BenchPunkt[];
 };
 
-export type WariantBenchmarku = { watki: number; przebiegi: number };
-
-export async function pobierzLiczbeRdzeni(): Promise<number> {
-  const r = await http<{ hardwareConcurrency: number }>(`/api/bench/info`);
-  return r.hardwareConcurrency;
-}
-
-export async function uruchomBenchmark(
-  projectId: string,
-  maxBadanych: number,
-  warianty: WariantBenchmarku[],
-): Promise<BenchWynik> {
-  const runs = warianty.map((w) => `${w.watki}:${w.przebiegi}`).join(',');
-  const params = new URLSearchParams({ maxSubjects: String(maxBadanych), runs });
-  return http<BenchWynik>(`/api/projects/${encodeURIComponent(projectId)}/bench?${params}`, {
+export async function uruchomBenchmark(projectId: string, maxBadanych: number): Promise<BenchWynik> {
+  return http<BenchWynik>(`/api/projects/${encodeURIComponent(projectId)}/bench?maxSubjects=${maxBadanych}`, {
     method: 'POST',
   });
 }

@@ -31,6 +31,7 @@ export type PodsumowanieAnalizy = {
   time: number[];
   freq: number[];
   band: { fMin: number; fMax: number };
+  hasMap: boolean;
   tasks: OpisZadania[];
   subjects: string[];
   average: Record<string, WynikZadania>;

@@ -35,11 +35,6 @@ struct Event {
   std::string description;
 };
 
-struct EdfRecord {
-  std::vector<SignalWindow> signals;
-  std::vector<Event> events;
-};
-
 class EdfReader {
  public:
   RecordMetadata read_metadata(const std::filesystem::path& path, const std::string& record_id) const;
@@ -50,8 +45,8 @@ class EdfReader {
                            int decimate) const;
   std::vector<Event> read_events(const std::filesystem::path& path) const;
 
-  EdfRecord read_record(const std::filesystem::path& path,
-                        const std::vector<std::string>& channel_names) const;
+  std::vector<SignalWindow> read_channels(const std::filesystem::path& path,
+                                          const std::vector<std::string>& channel_names) const;
 };
 
 }

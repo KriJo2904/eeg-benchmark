@@ -144,11 +144,6 @@ async function main() {
     res.end();
   });
 
-  app.use((err, _req, res, _next) => {
-    console.warn(err);
-    res.status(err.name === 'CastError' ? 404 : 500).send(err.message);
-  });
-
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`projects-api listening on :${PORT}`);
   });

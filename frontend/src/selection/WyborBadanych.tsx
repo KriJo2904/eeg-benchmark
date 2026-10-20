@@ -26,6 +26,7 @@ export function WyborBadanych(props: { stan: WyborState }) {
       <h2 className="text-sm font-semibold text-text">Badani</h2>
       <p className="mt-0.5 text-[11px] text-muted">
         W zbiorze jest {wszyscyBadani.length} osób, wybrano <strong className="text-text">{wybraniBadani.length}</strong>.
+        Mniej badanych = szybsza analiza, więcej = gładsze krzywe.
       </p>
 
       <div className="mt-3 flex border border-border">

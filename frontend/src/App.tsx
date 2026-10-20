@@ -32,7 +32,7 @@ function ProjectWorkspace() {
         <Route path="data" element={<DataPage eeg={eeg} />} />
         <Route path="pipeline" element={<PipelinePage wybor={wybor} projectId={id} />} />
         <Route path="selection" element={<SelectionPage stan={wybor} />} />
-        <Route path="results" element={<ResultsPage projectId={id} />} />
+        <Route path="results" element={<ResultsPage projectId={id} wybor={wybor} />} />
         <Route path="performance" element={<PerformancePage projectId={id} wybor={wybor} />} />
         <Route path="*" element={<Navigate to="data" replace />} />
       </Routes>

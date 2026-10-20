@@ -11,6 +11,10 @@ export function WyborZadan(props: { stan: WyborState }) {
   return (
     <div className="border border-border bg-surface p-4">
       <h2 className="text-sm font-semibold text-text">Zadania</h2>
+      <p className="mt-0.5 text-[11px] text-muted">
+        Każdy badany wykonał 14 nagrań (R01–R14). Zaznaczone zadanie wskazuje, które z nich wczytać.
+        Wyniki liczymy dla każdego zadania osobno, bo T1 i T2 oznaczają w nich inny ruch.
+      </p>
       <div className="mt-3 space-y-1.5">
         {zadania.map((z) => (
           <label key={z.id} className="flex cursor-pointer items-center gap-2 text-xs text-text">

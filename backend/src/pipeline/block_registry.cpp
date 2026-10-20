@@ -29,4 +29,6 @@ std::unique_ptr<Block> BlockRegistry::create(const std::string& kind) const {
   return d ? d->factory() : nullptr;
 }
 
+std::vector<BlockDescriptor> BlockRegistry::all() const { return blocks_; }
+
 }

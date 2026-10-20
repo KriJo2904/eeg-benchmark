@@ -7,6 +7,8 @@ function badgeColor(badge: string) {
   if (badge === 'FFT') return 'bg-accentSoft text-accent';
   if (badge === 'Filter') return 'bg-[#ecfdf3] text-[#027a48]';
   if (badge === 'Prep') return 'bg-[#fdf2fa] text-[#c11574]';
+  if (badge === 'STFT') return 'bg-[#fef3c7] text-[#92400e]';
+  if (badge === 'BP') return 'bg-[#fef3c7] text-[#92400e]';
   return 'bg-accentSoft text-accent';
 }
 
@@ -14,7 +16,7 @@ export function PipelineNode(props: NodeProps<PipelineNodeData>) {
   const { data, selected } = props;
 
   const BADGE: Record<PipelineNodeData['kind'], string> = {
-    start: 'IO', end: 'IO', lowpass: 'Filter', fft: 'FFT', normalize: 'Prep',
+    start: 'IO', end: 'IO', lowpass: 'Filter', fft: 'FFT', normalize: 'Prep', spektrogram: 'STFT', band_power: 'BP',
   };
   const badge = BADGE[data.kind];
 
@@ -26,6 +28,10 @@ export function PipelineNode(props: NodeProps<PipelineNodeData>) {
   else if (data.kind === 'fft')
     subtitle = `okno ${data.params.windowSize} • overlap ${(data.params.overlap * 100).toFixed(0)}%`;
   else if (data.kind === 'normalize') subtitle = `metoda ${data.params.method}`;
+  else if (data.kind === 'spektrogram') subtitle = `mapa ERD ${data.params.fMin}–${data.params.fMax} Hz`;
+  else if (data.kind === 'band_power') {
+    subtitle = `${data.params.fMin}–${data.params.fMax} Hz · ${data.params.agg}`;
+  }
 
   const shellClass = selected ? 'border-accent ring-2 ring-accent/20' : 'border-border hover:border-border/70';
 

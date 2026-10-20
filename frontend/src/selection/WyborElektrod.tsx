@@ -18,6 +18,10 @@ export function WyborElektrod(props: { stan: WyborState }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-text">Elektrody</h2>
+          <p className="mt-0.5 text-[11px] text-muted">
+            Widok głowy z góry, nos u góry. Kliknięcie dodaje albo zdejmuje elektrodę. Dla ruchu ręki najciekawsze są
+            C3 i C4 nad korą ruchową.
+          </p>
         </div>
         <div className="flex gap-2">
           <Przycisk onClick={() => zmien({ channels: [...elektrody] })}>Wszystkie</Przycisk>
@@ -41,7 +45,7 @@ export function WyborElektrod(props: { stan: WyborState }) {
             wybor.channels.map((c) => (
               <span key={c} className="inline-flex items-center gap-1 border border-accent bg-accentSoft px-2 py-0.5 text-[11px] font-medium text-accent">
                 {c.replace(/\.+$/, '')}
-                <button type="button" onClick={() => przelacz(c)} className="text-accent/70 hover:text-accent" aria-label="Usuń">
+                <button type="button" onClick={() => przelacz(c)} className="text-accent/70 hover:text-accent" title="Usuń">
                   ×
                 </button>
               </span>

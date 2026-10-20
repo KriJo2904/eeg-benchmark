@@ -16,6 +16,7 @@ DatasetIndex::DatasetIndex(std::filesystem::path root) : root_(std::move(root)) 
 
 void DatasetIndex::scan() {
   if (root_.empty() || !std::filesystem::exists(root_)) {
+    std::scoped_lock lk(mu_);
     records_.clear();
     return;
   }
@@ -27,10 +28,13 @@ void DatasetIndex::scan() {
     found.push_back(std::filesystem::relative(entry.path(), root_).generic_string());
   }
   std::sort(found.begin(), found.end());
+
+  std::scoped_lock lk(mu_);
   records_ = std::move(found);
 }
 
 std::vector<RecordRef> DatasetIndex::list_records() const {
+  std::scoped_lock lk(mu_);
   std::vector<RecordRef> out;
   out.reserve(records_.size());
   for (const auto& rel : records_) {
@@ -40,6 +44,7 @@ std::vector<RecordRef> DatasetIndex::list_records() const {
 }
 
 std::vector<std::string> DatasetIndex::list_subjects() const {
+  std::scoped_lock lk(mu_);
   std::vector<std::string> subjects;
   for (const auto& rel : records_) {
     auto slash = rel.find('/');
@@ -51,6 +56,7 @@ std::vector<std::string> DatasetIndex::list_subjects() const {
 }
 
 std::vector<RecordRef> DatasetIndex::list_records_for_subject(const std::string& subject_id) const {
+  std::scoped_lock lk(mu_);
   const std::string prefix = subject_id + "/";
   std::vector<RecordRef> out;
   for (const auto& rel : records_) {
@@ -61,6 +67,7 @@ std::vector<RecordRef> DatasetIndex::list_records_for_subject(const std::string&
 }
 
 std::filesystem::path DatasetIndex::resolve_path(const std::string& id) const {
+  std::scoped_lock lk(mu_);
   return root_ / id;
 }
 

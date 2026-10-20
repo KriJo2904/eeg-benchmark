@@ -31,13 +31,16 @@ PipelineGraph parse_pipeline(const nlohmann::json& j);
 std::vector<std::string> execution_order(const PipelineGraph& g);
 
 struct NodeRunResult {
+  std::string node_id;
   std::string kind;
   std::string label;
+  std::string status;
   double duration_ms = 0;
 };
 
 struct PipelineRunResult {
   std::vector<NodeRunResult> nodes;
+  double total_ms = 0;
   Signal output;
 };
 

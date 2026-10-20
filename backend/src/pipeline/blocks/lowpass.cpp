@@ -26,9 +26,9 @@ std::vector<double> moving_average(const std::vector<double>& src, int window) {
 class LowpassBlock final : public Block {
  public:
 
-  void process(const nlohmann::json& params, Signal& out) override {
-    const double cutoff_hz = params.value("cutoffHz", 30.0);
-    const int order = std::max(1, params.value("order", 4));
+  void process(const BlockContext& ctx, Signal& out) override {
+    const double cutoff_hz = ctx.params.value("cutoffHz", 30.0);
+    const int order = std::max(1, ctx.params.value("order", 1));
 
     for (auto& ch : out.channels) {
       if (ch.sample_rate_hz <= 0.0 || cutoff_hz <= 0.0) continue;
@@ -41,6 +41,6 @@ class LowpassBlock final : public Block {
   }
 };
 
-EEG_REGISTER_BLOCK("lowpass", LowpassBlock)
+EEG_REGISTER_BLOCK("lowpass", "processing", "Filtr dolnoprzepustowy", LowpassBlock)
 
 }

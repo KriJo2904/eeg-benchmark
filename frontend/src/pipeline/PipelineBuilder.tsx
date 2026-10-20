@@ -10,12 +10,10 @@ import ReactFlow, {
 import type { Connection, Edge, Node, ReactFlowInstance } from 'reactflow';
 import { getBlockDefinition } from './blockRegistry';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
-import { USUNIETE_BLOKI, usunBloki, ustawieniaZeStarychBlokow } from './migratePipelineData';
+import { migrateLoadedPipelineNodes, stripLegacyChannelSelect } from './migratePipelineData';
 import { PipelineInspector } from './PipelineInspector';
 import { PipelineNode } from './PipelineNode';
 import { PipelinePalette } from './PipelinePalette';
-import { PanelUstawienAnalizy } from './PanelUstawienAnalizy';
-import { DOMYSLNE_USTAWIENIA, type UstawieniaAnalizy } from './ustawieniaAnalizy';
 import { getProject, patchProject } from '../projectsApi';
 import type { BlockKind, PipelineNodeData } from './types';
 
@@ -54,13 +52,11 @@ type PipelineFileV1 = {
     source: string;
     target: string;
   }>;
-  analysis?: UstawieniaAnalizy;
 };
 
-function serializePipeline(nodes: PipelineRfNode[], edges: Edge[], ustawienia: UstawieniaAnalizy): PipelineFileV1 {
+function serializePipeline(nodes: PipelineRfNode[], edges: Edge[]): PipelineFileV1 {
   return {
     version: 1,
-    analysis: ustawienia,
     nodes: nodes.map((n) => ({
       id: n.id,
       position: { x: n.position.x, y: n.position.y },
@@ -90,6 +86,8 @@ function makePipelineEdge(e: { id?: string; source: string; target: string }): E
 
 const DOMYSLNE_BLOKI: Array<{ id: string; kind: BlockKind }> = [
   { id: 'n1', kind: 'fft' },
+  { id: 'n2', kind: 'spektrogram' },
+  { id: 'n3', kind: 'band_power' },
 ];
 
 const initialNodes: PipelineRfNode[] = [
@@ -158,24 +156,15 @@ function sciezkaOdStartu(edges: Edge[]): string[] {
   return sciezka;
 }
 
-function grafZZapisu(file: PipelineFileV1): {
-  nodes: PipelineRfNode[];
-  edges: Edge[];
-  ustawienia: UstawieniaAnalizy;
-} {
-  const ustawienia = file.analysis ?? ustawieniaZeStarychBlokow(file.nodes);
-  const stripped = usunBloki(
+function grafZZapisu(file: PipelineFileV1): { nodes: PipelineRfNode[]; edges: Edge[] } {
+  const stripped = stripLegacyChannelSelect(
     file.nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
     file.edges,
-    USUNIETE_BLOKI,
   );
-  const nodes: PipelineRfNode[] = stripped.nodes.map((n) => ({
-    id: n.id,
-    type: 'pipelineNode',
-    position: n.position,
-    data: n.data,
-  }));
-  return { ...ensureFixedNodes(nodes, stripped.edges.map(makePipelineEdge)), ustawienia };
+  const nodes: PipelineRfNode[] = migrateLoadedPipelineNodes(
+    stripped.nodes.map((n) => ({ id: n.id, type: 'pipelineNode', position: n.position, data: n.data })),
+  );
+  return ensureFixedNodes(nodes, stripped.edges.map(makePipelineEdge));
 }
 
 export function PipelineBuilder(props: { projectId: string }) {
@@ -188,10 +177,8 @@ export function PipelineBuilder(props: { projectId: string }) {
   const [fileError, setFileError] = useState<string | null>(null);
   const [remoteStatus, setRemoteStatus] = useState<'idle' | 'loading' | 'synced' | 'error'>('loading');
   const [remoteError, setRemoteError] = useState<string | null>(null);
-  const wczytanyProjektRef = useRef<string | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [ustawienia, setUstawienia] = useState<UstawieniaAnalizy>(DOMYSLNE_USTAWIENIA);
   const [canvasMenu, setCanvasMenu] = useState<PipelineCanvasMenu | null>(null);
 
   const sciezka = useMemo(() => {
@@ -322,7 +309,7 @@ export function PipelineBuilder(props: { projectId: string }) {
   );
 
   const onSaveToFile = useCallback(() => {
-    const payload = serializePipeline(nodes, edges, ustawienia);
+    const payload = serializePipeline(nodes, edges);
     const text = JSON.stringify(payload, null, 2);
     const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -331,7 +318,7 @@ export function PipelineBuilder(props: { projectId: string }) {
     a.download = `pipeline.${projectId}.v1.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, [edges, nodes, projectId, ustawienia]);
+  }, [edges, nodes, projectId]);
 
   const onPickFile = useCallback(() => {
     if (!window.confirm('Czy na pewno wczytać pipeline z pliku? Bieżący stan zostanie zastąpiony.')) return;
@@ -348,7 +335,6 @@ export function PipelineBuilder(props: { projectId: string }) {
 
       const graf = grafZZapisu(parsed);
       setNodes(graf.nodes);
-      setUstawienia(graf.ustawienia);
       setEdges(graf.edges);
       setSelectedId(null);
       setFileError(null);
@@ -373,10 +359,8 @@ export function PipelineBuilder(props: { projectId: string }) {
         if (pip && isPipelineFileV1(pip)) {
           const graf = grafZZapisu(pip);
           setNodes(graf.nodes);
-          setUstawienia(graf.ustawienia);
           setEdges(graf.edges);
           setRemoteStatus('synced');
-          wczytanyProjektRef.current = projectId;
           fitAfterLoad();
           return;
         }
@@ -385,25 +369,20 @@ export function PipelineBuilder(props: { projectId: string }) {
           const raw = localStorage.getItem(storageKey(projectId));
           if (!raw) {
             setRemoteStatus('idle');
-            wczytanyProjektRef.current = projectId;
             return;
           }
           const parsed = JSON.parse(raw) as unknown;
           if (!isPipelineFileV1(parsed)) {
             setRemoteStatus('idle');
-            wczytanyProjektRef.current = projectId;
             return;
           }
           const graf = grafZZapisu(parsed);
           setNodes(graf.nodes);
-          setUstawienia(graf.ustawienia);
           setEdges(graf.edges);
           setRemoteStatus('idle');
-          wczytanyProjektRef.current = projectId;
           fitAfterLoad();
         } catch {
           setRemoteStatus('idle');
-          wczytanyProjektRef.current = projectId;
         }
       })
       .catch((e: unknown) => {
@@ -418,31 +397,35 @@ export function PipelineBuilder(props: { projectId: string }) {
   }, [projectId, setEdges, setNodes]);
 
   useEffect(() => {
-    if (wczytanyProjektRef.current !== projectId) return;
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
-      const payload = serializePipeline(nodes, edges, ustawienia);
       try {
+        const payload = serializePipeline(nodes, edges);
         localStorage.setItem(storageKey(projectId), JSON.stringify(payload));
       } catch (e) {
         console.warn(e);
       }
 
-      patchProject(projectId, { pipeline: payload })
-        .then(() => {
-          setRemoteStatus('synced');
-          setRemoteError(null);
-        })
-        .catch((e: unknown) => {
-          setRemoteStatus('error');
-          setRemoteError(e instanceof Error ? e.message : String(e));
-        });
+      try {
+        const payload = serializePipeline(nodes, edges);
+        patchProject(projectId, { pipeline: payload })
+          .then(() => {
+            setRemoteStatus('synced');
+            setRemoteError(null);
+          })
+          .catch((e: unknown) => {
+            setRemoteStatus('error');
+            setRemoteError(e instanceof Error ? e.message : String(e));
+          });
+      } catch (e) {
+        console.warn(e);
+      }
     }, 250);
 
     return () => {
       if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     };
-  }, [edges, nodes, projectId, ustawienia]);
+  }, [edges, nodes, projectId]);
 
   const confirmClearConnections = useCallback(() => {
     if (!edges.length) return;
@@ -467,7 +450,6 @@ export function PipelineBuilder(props: { projectId: string }) {
     >
       <div className="space-y-4">
         <PipelinePalette onAddBlock={onAddBlock} />
-        <PanelUstawienAnalizy ustawienia={ustawienia} onChange={setUstawienia} />
       </div>
 
       <div
@@ -476,7 +458,7 @@ export function PipelineBuilder(props: { projectId: string }) {
         <div className="flex min-h-[52px] flex-wrap items-center justify-between gap-2 px-4 py-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-text">Plansza</h2>
-            <p className="mt-0.5 truncate text-[11px] text-muted">
+            <p className="mt-0.5 truncate text-[11px] text-muted" title={sciezka.etykiety.join(' > ')}>
               {sciezka.etykiety.join(' › ')}
               {sciezka.doKonca ? '' : ' (nie dochodzi do Koniec)'}
               {sciezka.poza > 0 ? ` · ${sciezka.poza} ${sciezka.poza === 1 ? 'blok poza ścieżką' : 'bloki poza ścieżką'}` : ''}
@@ -487,27 +469,29 @@ export function PipelineBuilder(props: { projectId: string }) {
               type="button"
               onClick={onSaveToFile}
               className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg"
+              title="Zapisz pipeline do pliku JSON"
             >
               Eksport
             </button>
             <button
               type="button"
               onClick={onPickFile}
-              className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg"
+              className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg disabled:cursor-not-allowed disabled:opacity-45"
+              title="Wczytaj pipeline z pliku JSON"
             >
               Import
             </button>
             <button
               type="button"
               onClick={confirmClearConnections}
-              className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg"
+              className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg disabled:cursor-not-allowed disabled:opacity-45"
             >
               Wyczyść połączenia
             </button>
             <button
               type="button"
               onClick={confirmClearAll}
-              className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg"
+              className="border border-border bg-surface px-3 py-1.5 text-xs font-medium text-text hover:bg-bg disabled:cursor-not-allowed disabled:opacity-45"
             >
               Wyczyść wszystko
             </button>
@@ -560,6 +544,8 @@ export function PipelineBuilder(props: { projectId: string }) {
                   if (d.kind === 'fft') return '#1e66d0';
                   if (d.kind === 'lowpass') return '#027a48';
                   if (d.kind === 'normalize') return '#c11574';
+                  if (d.kind === 'spektrogram') return '#d97706';
+                  if (d.kind === 'band_power') return '#92400e';
                   return '#9fb2c6';
                 }}
               />
@@ -670,6 +656,7 @@ export function PipelineBuilder(props: { projectId: string }) {
             type="button"
             onClick={() => setInspectorOpen(true)}
             className="flex w-full flex-1 items-center justify-center px-2 py-3 text-xs font-semibold text-muted hover:bg-bg hover:text-text lg:min-h-[calc(680px+52px+41px)] lg:[writing-mode:vertical-rl] lg:py-6"
+            title="Pokaż panel parametrów"
           >
             Parametry
           </button>

@@ -8,14 +8,14 @@ namespace eeg::pipeline {
 class FftBlock final : public Block {
  public:
 
-  void process(const nlohmann::json& params, Signal& out) override {
-    const int window_size = std::max(2, params.value("windowSize", 128));
-    const double overlap = params.value("overlap", 0.9);
+  void process(const BlockContext& ctx, Signal& out) override {
+    const int window_size = std::max(2, ctx.params.value("windowSize", 512));
+    const double overlap = ctx.params.value("overlap", 0.5);
 
-    out.spectrograms = compute_stft_all(out.channels, window_size, overlap, 1);
+    out.spectrograms = compute_stft_all(out.channels, window_size, overlap);
   }
 };
 
-EEG_REGISTER_BLOCK("fft", FftBlock)
+EEG_REGISTER_BLOCK("fft", "processing", "Transformacja Fouriera", FftBlock)
 
 }

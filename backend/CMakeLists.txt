@@ -50,11 +50,12 @@ add_library(eeg_core STATIC
 target_include_directories(eeg_core PUBLIC include)
 target_link_libraries(eeg_core PUBLIC edflib)
 
-# --- Obliczenia STFT + podział pracy na wątki ---
+# --- Obliczenia STFT + thread pool ---
 # Wspólne dla serwera i bench_pipeline, żeby benchmark mierzył dokładnie ten sam kod.
 add_library(eeg_fft STATIC
   src/pipeline/fft_utils.cpp
   src/pipeline/stft.cpp
+  src/pipeline/thread_pool.cpp
   src/pipeline/parallel_for.cpp
 )
 target_include_directories(eeg_fft PUBLIC include)

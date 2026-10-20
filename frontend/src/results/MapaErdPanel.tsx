@@ -44,6 +44,10 @@ export function MapaErdPanel(props: {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <h2 className="text-sm font-semibold text-text">Mapa czas × częstotliwość (ERD %)</h2>
+          <p className="text-[11px] text-muted">
+            To samo co wyżej, ale dla wszystkich częstotliwości naraz, uśrednione po wszystkich badanych.
+            Niebieski to spadek mocy, czerwony wzrost. Ramka zaznacza pasmo z bloku „Moc pasma”.
+          </p>
         </div>
         <div className="flex gap-2">
           <Lista etykieta="Elektroda" value={el} opcje={wynik.channels.map((c) => [c, bezKropek(c)])} onChange={setElektroda} />

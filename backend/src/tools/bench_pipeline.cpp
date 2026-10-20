@@ -58,9 +58,10 @@ bool self_test() {
   for (int i = 0; i < 160 * 5; ++i) sine.samples.push_back(std::sin(2.0 * M_PI * f_sin * i / fs));
   const std::vector<ChannelSeries> input = {sine, sine, sine};
 
-  const auto seq = eeg::pipeline::compute_stft_all(input, 160, 0.5, 1);
-  const auto par =
-      eeg::pipeline::compute_stft_all(input, 160, 0.5, eeg::pipeline::default_threads());
+  eeg::pipeline::set_max_threads(1);
+  const auto seq = eeg::pipeline::compute_stft_all(input, 160, 0.5);
+  eeg::pipeline::set_max_threads(0);
+  const auto par = eeg::pipeline::compute_stft_all(input, 160, 0.5);
 
   for (const auto& spec : seq) {
     for (std::size_t t = 0; t < spec.time_sec.size(); ++t) {
@@ -84,12 +85,13 @@ double median(std::vector<double> v) {
 
 double measure(const std::vector<ChannelSeries>& channels, int window_size, double overlap,
                std::size_t threads, int repeats) {
-  (void)eeg::pipeline::compute_stft_all(channels, window_size, overlap, threads);
+  eeg::pipeline::set_max_threads(threads);
+  (void)eeg::pipeline::compute_stft_all(channels, window_size, overlap);
 
   std::vector<double> times;
   for (int r = 0; r < repeats; ++r) {
     const auto start = std::chrono::steady_clock::now();
-    (void)eeg::pipeline::compute_stft_all(channels, window_size, overlap, threads);
+    (void)eeg::pipeline::compute_stft_all(channels, window_size, overlap);
     const auto stop = std::chrono::steady_clock::now();
     times.push_back(std::chrono::duration<double, std::milli>(stop - start).count());
   }
