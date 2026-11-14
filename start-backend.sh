@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-# Maszyna z backendem: buduje i uruchamia eeg_server natywnie (bez Dockera).
-# Użycie: ./start-backend.sh [adres maszyny z aplikacją]
-#   ./start-backend.sh                  aplikacja na tej samej maszynie (127.0.0.1:3000)
-#   ./start-backend.sh 192.168.1.10     aplikacja na innej maszynie, port 3000 dopisze się sam
-# Zmienne: EEG_DATA_DIR (katalog ze zbiorami, domyślnie backend/dane), PORT (domyślnie 8080).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"

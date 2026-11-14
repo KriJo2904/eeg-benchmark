@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Maszyna z aplikacją: Mongo, projects-api i frontend w Dockerze.
-# Adres backendu wpisuje się na froncie w panelu Backend.
-# Zmienne: FRONTEND_PORT (domyślnie 5173).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"

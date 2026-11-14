@@ -22,6 +22,8 @@ port 3000 maszyny z aplikacją. Przeglądarka łączy się z backendem bezpośre
 
 ### Maszyna z aplikacją (Docker)
 
+Potrzebne: Docker z Compose (v2).
+
 ```bash
 ./start-aplikacja.sh
 ```
@@ -32,7 +34,9 @@ Zatrzymanie: `docker compose down`. Logi: `docker compose logs -f`.
 
 ### Maszyna z backendem (natywnie)
 
-Potrzebne: kompilator C++20, CMake 3.24+, curl, unzip i tar.
+Potrzebne: kompilator C++20 (GCC 11+ albo Clang 14+), CMake 3.24+, git, curl, unzip i tar. Przy pierwszym
+budowaniu CMake pobiera z GitHuba nlohmann/json, cpp-httplib i pocketfft, więc potrzebny jest internet.
+Na Ubuntu 24.04 (starsze mają za stary CMake): `sudo apt install build-essential cmake git curl unzip`.
 
 ```bash
 ./start-backend.sh 192.168.1.10
