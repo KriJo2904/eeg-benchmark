@@ -17,11 +17,10 @@ constexpr double kSampleRateHz = 160.0;
 struct AnalysisSettings {
   double band_f_min = 8.0;
   double band_f_max = 13.0;
-  double map_f_min = 4.0;
-  double map_f_max = 40.0;
+  bool has_map = false;
 };
 
-AnalysisSettings parse_settings(const nlohmann::json& pipeline);
+AnalysisSettings parse_settings(const eeg::pipeline::PipelineGraph& graph);
 
 struct CurveSum {
   std::vector<std::vector<double>> power;

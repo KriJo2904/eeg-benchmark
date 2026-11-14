@@ -53,80 +53,51 @@ void merge_map(MapSum& into, const MapSum& from) {
   into.epochs += from.epochs;
 }
 
-void add_map_epoch(MapSum& into, const eeg::pipeline::Signal& out, const std::vector<std::size_t>& rows) {
-  const std::size_t n_time = out.spectrograms[0].time_sec.size();
-  if (into.power.empty()) {
-    into.power.assign(out.spectrograms.size(), std::vector<double>(rows.size() * n_time, 0.0));
-    into.n_time = n_time;
-  }
-  for (std::size_t c = 0; c < out.spectrograms.size() && c < into.power.size(); ++c) {
-    const auto& spec = out.spectrograms[c];
-    for (std::size_t r = 0; r < rows.size(); ++r) {
-      for (std::size_t t = 0; t < n_time && t < spec.time_sec.size(); ++t) {
-        into.power[c][r * n_time + t] += spec.power_at(rows[r], t);
-      }
-    }
+void add_map_epoch(MapSum& into, const eeg::pipeline::Signal& out) {
+  into.n_time = out.spectrograms[0].time_sec.size();
+  if (into.power.empty()) into.power.resize(out.map_power.size());
+  for (std::size_t c = 0; c < out.map_power.size() && c < into.power.size(); ++c) {
+    add_vector(into.power[c], out.map_power[c]);
   }
   ++into.epochs;
 }
 
+const eeg::pipeline::GraphNode* find_node(const PipelineGraph& graph, const std::string& id) {
+  for (const auto& n : graph.nodes) {
+    if (n.id == id) return &n;
+  }
+  return nullptr;
+}
+
 void check_pipeline(const PipelineGraph& graph) {
-  const auto order = eeg::pipeline::execution_order(graph);
-  const eeg::pipeline::GraphNode* fft = nullptr;
-  for (const auto& id : order) {
-    const eeg::pipeline::GraphNode* node = nullptr;
-    for (const auto& n : graph.nodes) {
-      if (n.id == id) node = &n;
-    }
-    if (!node) continue;
-
-    if (node->kind == "fft") fft = node;
-    if ((node->kind == "lowpass" || node->kind == "normalize") && fft) {
-      throw std::runtime_error("Blok „" + node->label + "” musi być przed blokiem „Transformacja Fouriera” " +
-                               "- po STFT nie ma już próbek w czasie, które mógłby przetworzyć.");
-    }
+  const eeg::pipeline::GraphNode* stft = nullptr;
+  int curves = 0;
+  int maps = 0;
+  for (const auto& id : eeg::pipeline::execution_order(graph)) {
+    const auto* node = find_node(graph, id);
+    if (node->kind == "stft") stft = node;
+    if (node->kind == "krzywa_erd") ++curves;
+    if (node->kind == "mapa_erd") ++maps;
   }
-  if (order.empty() || order.back() != "end") {
-    throw std::runtime_error("Pipeline musi być jedną ścieżką od Start do Koniec - ostatni blok nie jest połączony z Koniec.");
+  if (!stft) {
+    throw std::runtime_error("Przetwarzanie wstępne musi prowadzić od Start do bloku „Spektrogram” (STFT).");
   }
-  if (!fft) throw std::runtime_error("Pipeline musi zawierać blok „Transformacja Fouriera” (STFT) połączony ze Start.");
+  if (curves != 1) {
+    throw std::runtime_error("Do Spektrogramu musi być podłączona dokładnie jedna „Krzywa ERD”.");
+  }
+  if (maps > 1) throw std::runtime_error("Do Spektrogramu można podłączyć najwyżej jedną „Mapę ERD”.");
 
-  const int window = fft->params.value("windowSize", 128);
+  const int window = stft->params.value("windowSize", 128);
   const int epoch_samples = static_cast<int>((kEpochPreSec + kEpochPostSec) * kSampleRateHz);
   if (window > epoch_samples / 4) {
     throw std::runtime_error("Okno STFT (" + std::to_string(window) + " próbek) jest za długie dla epoki " +
                              std::to_string(epoch_samples) + " próbek (5 s przy 160 Hz). " +
-                             "Ustaw w bloku FFT najwyżej " + std::to_string(epoch_samples / 4) +
+                             "Ustaw w bloku Spektrogram najwyżej " + std::to_string(epoch_samples / 4) +
                              " (np. 128).");
   }
 }
 
-std::vector<std::size_t> rows_in_range(const std::vector<double>& freq, double f_min, double f_max) {
-  std::vector<std::size_t> rows;
-  for (std::size_t f = 0; f < freq.size(); ++f) {
-    if (freq[f] >= f_min && freq[f] <= f_max) rows.push_back(f);
-  }
-  return rows;
-}
-
-std::vector<std::vector<double>> band_power(const std::vector<eeg::pipeline::ChannelSpectrogram>& specs,
-                                            const AnalysisSettings& settings) {
-  std::vector<std::vector<double>> result;
-  for (const auto& spec : specs) {
-    const auto rows = rows_in_range(spec.freq_hz, settings.band_f_min, settings.band_f_max);
-    std::vector<double> power(spec.time_sec.size(), 0.0);
-    for (std::size_t t = 0; t < power.size() && !rows.empty(); ++t) {
-      double sum = 0.0;
-      for (std::size_t f : rows) sum += spec.power_at(f, t);
-      power[t] = sum / static_cast<double>(rows.size());
-    }
-    result.push_back(power);
-  }
-  return result;
-}
-
-void add_epoch(RecordPartial& part, const std::string& event, const PipelineRunResult& run,
-               const AnalysisSettings& settings) {
+void add_epoch(RecordPartial& part, const std::string& event, const PipelineRunResult& run) {
   const auto& out = run.output;
   if (out.spectrograms.empty()) return;
 
@@ -139,19 +110,16 @@ void add_epoch(RecordPartial& part, const std::string& event, const PipelineRunR
     part.blocks[i].ms += run.nodes[i].duration_ms;
   }
 
-  merge_curve(part.curves[event], CurveSum{band_power(out.spectrograms, settings), 1});
+  merge_curve(part.curves[event], CurveSum{out.band_power, 1});
 
-  const auto& freq = out.spectrograms[0].freq_hz;
-  const auto rows = rows_in_range(freq, settings.map_f_min, settings.map_f_max);
-  if (part.freq_hz.empty()) {
-    for (std::size_t f : rows) part.freq_hz.push_back(freq[f]);
+  if (!out.map_power.empty()) {
+    if (part.freq_hz.empty()) part.freq_hz = out.map_freq_hz;
+    add_map_epoch(part.maps[event], out);
   }
-  add_map_epoch(part.maps[event], out, rows);
   ++part.epochs;
 }
 
 RecordPartial process_record(const RecordJob& job, const PipelineGraph& graph,
-                             const AnalysisSettings& settings,
                              const std::vector<std::string>& channels, const EdfReader& reader) {
   const EdfRecord record = reader.read_record(job.path, channels);
   const auto& signals = record.signals;
@@ -166,7 +134,7 @@ RecordPartial process_record(const RecordJob& job, const PipelineGraph& graph,
 
   RecordPartial part;
   for (auto& epoch : cut_epochs(signals, events, baseline)) {
-    add_epoch(part, epoch.event, eeg::pipeline::run_pipeline(graph, std::move(epoch.signal)), settings);
+    add_epoch(part, epoch.event, eeg::pipeline::run_pipeline(graph, std::move(epoch.signal)));
   }
   return part;
 }
@@ -198,7 +166,6 @@ void merge_record(AnalysisResult& r, const RecordJob& job, const RecordPartial& 
 
 struct AnalysisInput {
   const PipelineGraph& graph;
-  const AnalysisSettings& settings;
   const std::vector<RecordJob>& jobs;
   const std::vector<std::string>& channels;
   const EdfReader& reader;
@@ -211,7 +178,7 @@ void process_range(const AnalysisInput& in, std::size_t begin, std::size_t end,
     if (in.cancel && in.cancel->load()) return;
     const RecordJob& job = in.jobs[i];
     try {
-      merge_record(out, job, process_record(job, in.graph, in.settings, in.channels, in.reader));
+      merge_record(out, job, process_record(job, in.graph, in.channels, in.reader));
     } catch (const std::exception& e) {
       out.skipped.push_back(job.record_id + ": " + e.what());
     }
@@ -271,21 +238,22 @@ void check_range(double f_min, double f_max, const std::string& what) {
 
 }
 
-AnalysisSettings parse_settings(const nlohmann::json& pipeline) {
+AnalysisSettings parse_settings(const PipelineGraph& graph) {
   AnalysisSettings s;
-  for (const auto& n : pipeline.value("nodes", nlohmann::json::array())) {
-    const auto data = n.value("data", nlohmann::json::object());
-    const auto params = data.value("params", nlohmann::json::object());
-    const std::string kind = data.value("kind", std::string{});
-    if (kind == "band_power") read_range(params, s.band_f_min, s.band_f_max);
-    if (kind == "spektrogram") read_range(params, s.map_f_min, s.map_f_max);
+  for (const auto& id : eeg::pipeline::execution_order(graph)) {
+    const auto* node = find_node(graph, id);
+    if (node->kind == "krzywa_erd") {
+      read_range(node->params, s.band_f_min, s.band_f_max);
+      check_range(s.band_f_min, s.band_f_max, "Krzywa ERD");
+    }
+    if (node->kind == "mapa_erd") {
+      double f_min = 4.0;
+      double f_max = 40.0;
+      read_range(node->params, f_min, f_max);
+      check_range(f_min, f_max, "Mapa ERD");
+      s.has_map = true;
+    }
   }
-  const auto analysis = pipeline.value("analysis", nlohmann::json::object());
-  read_range(analysis.value("band", nlohmann::json::object()), s.band_f_min, s.band_f_max);
-  read_range(analysis.value("map", nlohmann::json::object()), s.map_f_min, s.map_f_max);
-
-  check_range(s.band_f_min, s.band_f_max, "Pasmo ERD");
-  check_range(s.map_f_min, s.map_f_max, "Mapa ERD");
   return s;
 }
 
@@ -301,7 +269,7 @@ AnalysisResult run_analysis(const PipelineGraph& graph, const AnalysisSettings& 
   result.records_total = jobs.size();
   result.threads = opt.threads > 0 ? opt.threads : eeg::pipeline::default_threads();
 
-  const AnalysisInput input{graph, settings, jobs, channels, reader, opt.cancel};
+  const AnalysisInput input{graph, jobs, channels, reader, opt.cancel};
   std::vector<AnalysisResult> partials(result.threads);
   std::atomic<std::size_t> done{0};
   const auto start = std::chrono::steady_clock::now();

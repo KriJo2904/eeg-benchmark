@@ -1,4 +1,13 @@
-import { DOMYSLNE_USTAWIENIA, type UstawieniaAnalizy, type Zakres } from './ustawieniaAnalizy';
+import { DOMYSLNE_PASMO_ERD, DOMYSLNY_ZAKRES_MAPY } from './blockRegistry';
+import type { PipelineNodeData, Zakres } from './types';
+
+export type ZapisanyWezel = {
+  id: string;
+  position: { x: number; y: number };
+  data: { kind: string; label?: string; params?: unknown };
+};
+
+export type ZapisanaKrawedz = { id?: string; source: string; target: string };
 
 type StarePasmo = { kind?: string; presetId?: string; fMin?: number; fMax?: number };
 
@@ -10,8 +19,6 @@ const STARE_PRESETY: Record<string, [number, number]> = {
   beta: [13, 30],
   gamma: [30, 45],
 };
-
-export const USUNIETE_BLOKI = ['channel_select', 'spektrogram', 'band_power'];
 
 function zakresZeStarychPasm(bands: StarePasmo[], domyslny: Zakres): Zakres {
   let lo = Infinity;
@@ -34,46 +41,83 @@ function zakresZParametrow(params: unknown, domyslny: Zakres): Zakres {
   return domyslny;
 }
 
-export function ustawieniaZeStarychBlokow(nodes: Array<{ data: { kind: string } }>): UstawieniaAnalizy {
-  const wynik = { ...DOMYSLNE_USTAWIENIA };
-  for (const n of nodes) {
-    const params = (n.data as { params?: unknown }).params;
-    if (n.data.kind === 'band_power') wynik.band = zakresZParametrow(params, DOMYSLNE_USTAWIENIA.band);
-    if (n.data.kind === 'spektrogram') wynik.map = zakresZParametrow(params, DOMYSLNE_USTAWIENIA.map);
-  }
-  return wynik;
+export const STFT_ID = 'stft';
+
+export function jestStarymZapisem(nodes: ZapisanyWezel[]): boolean {
+  return !nodes.some((n) => ['stft', 'krzywa_erd', 'mapa_erd'].includes(n.data.kind));
 }
 
-export function usunBloki<
-  N extends { id: string; data: { kind: string } },
-  E extends { id?: string; source: string; target: string },
->(nodes: N[], edges: E[], rodzaje: string[]): { nodes: N[]; edges: E[] } {
-  const removed = new Set<string>();
-  const kept: N[] = [];
+function lancuchOdStartu(edges: ZapisanaKrawedz[]): string[] {
+  const lancuch = ['start'];
+  const odwiedzone = new Set(lancuch);
+  let biezacy = 'start';
+  while (true) {
+    const dalej = edges.find((e) => e.source === biezacy);
+    if (!dalej || odwiedzone.has(dalej.target)) break;
+    lancuch.push(dalej.target);
+    odwiedzone.add(dalej.target);
+    biezacy = dalej.target;
+  }
+  return lancuch;
+}
+
+export function nowyZapisZeStarego(
+  nodes: ZapisanyWezel[],
+  edges: ZapisanaKrawedz[],
+  analysis?: { band?: unknown; map?: unknown },
+): { nodes: ZapisanyWezel[]; edges: ZapisanaKrawedz[] } {
+  let pasmo = DOMYSLNE_PASMO_ERD;
+  let mapa = DOMYSLNY_ZAKRES_MAPY;
   for (const n of nodes) {
-    if (rodzaje.includes(n.data.kind)) removed.add(n.id);
-    else kept.push(n);
+    if (n.data.kind === 'band_power') pasmo = zakresZParametrow(n.data.params, pasmo);
+    if (n.data.kind === 'spektrogram') mapa = zakresZParametrow(n.data.params, mapa);
   }
-  if (removed.size === 0) return { nodes: kept, edges };
+  if (analysis?.band) pasmo = zakresZParametrow(analysis.band, pasmo);
+  if (analysis?.map) mapa = zakresZParametrow(analysis.map, mapa);
 
-  let wynik = edges;
-  for (const x of removed) {
-    const incoming = wynik.filter((e) => e.target === x).map((e) => e.source);
-    const outgoing = wynik.filter((e) => e.source === x).map((e) => e.target);
-    const bypass: E[] = [];
-    for (const a of incoming) {
-      for (const b of outgoing) bypass.push({ source: a, target: b } as E);
+  const poId = new Map(nodes.map((n) => [n.id, n]));
+  const start = poId.get('start') ?? { id: 'start', position: { x: 80, y: 240 }, data: { kind: 'start', label: 'Start' } };
+  const wynik: ZapisanyWezel[] = [start];
+  const krawedzie: ZapisanaKrawedz[] = [];
+  let poprzedni = start;
+  let stft: ZapisanyWezel | null = null;
+
+  for (const id of lancuchOdStartu(edges).slice(1)) {
+    const n = poId.get(id);
+    if (!n) continue;
+    if (n.data.kind === 'lowpass' || n.data.kind === 'normalize') {
+      wynik.push(n);
+      krawedzie.push({ source: poprzedni.id, target: n.id });
+      poprzedni = n;
+    } else if (n.data.kind === 'fft') {
+      stft = { id: STFT_ID, position: n.position, data: { kind: 'stft', label: 'Spektrogram', params: n.data.params } };
+      break;
     }
-    wynik = [...wynik.filter((e) => e.source !== x && e.target !== x), ...bypass];
   }
 
-  const seen = new Set<string>();
-  const finalEdges: E[] = [];
-  for (const e of wynik) {
-    const key = `${e.source}→${e.target}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    finalEdges.push(e);
+  for (const n of nodes) {
+    const wstepny = n.data.kind === 'lowpass' || n.data.kind === 'normalize';
+    if (wstepny && !wynik.includes(n)) wynik.push(n);
   }
-  return { nodes: kept, edges: finalEdges };
+
+  if (!stft) {
+    stft = {
+      id: STFT_ID,
+      position: { x: poprzedni.position.x + 300, y: poprzedni.position.y },
+      data: { kind: 'stft', label: 'Spektrogram', params: { windowSize: 128, overlap: 0.9 } },
+    };
+  }
+  krawedzie.push({ source: poprzedni.id, target: STFT_ID });
+
+  const { x, y } = stft.position;
+  const erd: PipelineNodeData = { kind: 'krzywa_erd', label: 'Krzywa ERD', params: pasmo };
+  const mapaErd: PipelineNodeData = { kind: 'mapa_erd', label: 'Mapa ERD', params: mapa };
+  wynik.push(
+    stft,
+    { id: 'erd', position: { x: x + 320, y: y - 90 }, data: erd },
+    { id: 'mapa', position: { x: x + 320, y: y + 90 }, data: mapaErd },
+  );
+  krawedzie.push({ source: STFT_ID, target: 'erd' }, { source: STFT_ID, target: 'mapa' });
+
+  return { nodes: wynik, edges: krawedzie };
 }

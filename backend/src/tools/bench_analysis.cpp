@@ -31,17 +31,18 @@ std::vector<std::string> split_csv(const std::string& s) {
 json default_pipeline() {
   json nodes = json::array();
   nodes.push_back({{"id", "start"}, {"data", {{"kind", "start"}, {"label", "Start"}}}});
-  nodes.push_back({{"id", "n1"}, {"data", {{"kind", "fft"}, {"label", "FFT"},
-                                            {"params", {{"windowSize", 128}, {"overlap", 0.9}}}}}});
-  nodes.push_back({{"id", "end"}, {"data", {{"kind", "end"}, {"label", "Koniec"}}}});
+  nodes.push_back({{"id", "stft"}, {"data", {{"kind", "stft"}, {"label", "Spektrogram"},
+                                              {"params", {{"windowSize", 128}, {"overlap", 0.9}}}}}});
+  nodes.push_back({{"id", "erd"}, {"data", {{"kind", "krzywa_erd"}, {"label", "Krzywa ERD"},
+                                             {"params", {{"fMin", 8}, {"fMax", 13}}}}}});
+  nodes.push_back({{"id", "mapa"}, {"data", {{"kind", "mapa_erd"}, {"label", "Mapa ERD"},
+                                              {"params", {{"fMin", 4}, {"fMax", 40}}}}}});
 
   json edges = json::array();
-  const std::vector<std::string> order = {"start", "n1", "end"};
-  for (std::size_t i = 1; i < order.size(); ++i) {
-    edges.push_back({{"source", order[i - 1]}, {"target", order[i]}});
-  }
-  json analysis = {{"band", {{"fMin", 8}, {"fMax", 13}}}, {"map", {{"fMin", 4}, {"fMax", 40}}}};
-  return {{"version", 1}, {"nodes", nodes}, {"edges", edges}, {"analysis", analysis}};
+  edges.push_back({{"source", "start"}, {"target", "stft"}});
+  edges.push_back({{"source", "stft"}, {"target", "erd"}});
+  edges.push_back({{"source", "stft"}, {"target", "mapa"}});
+  return {{"version", 2}, {"nodes", nodes}, {"edges", edges}};
 }
 
 void parse_subjects(const std::string& arg, const std::vector<std::string>& all, Selection& sel) {
@@ -144,10 +145,10 @@ int main(int argc, char** argv) {
 
     const json pipeline = default_pipeline();
     const auto graph = eeg::pipeline::parse_pipeline(pipeline);
-    const auto settings = eeg::analysis::parse_settings(pipeline);
+    const auto settings = eeg::analysis::parse_settings(graph);
     const auto jobs = eeg::analysis::resolve_records(sel, index);
     std::cout << "rekordy: " << jobs.size() << ", elektrody: " << sel.channels.size()
-              << ", zadanie: " << argv[3] << ", pipeline: FFT(128, 90%) -> moc pasma 8-13 Hz\n";
+              << ", zadanie: " << argv[3] << ", pipeline: STFT(128, 90%) -> krzywa ERD 8-13 Hz, mapa 4-40 Hz\n";
 
     const auto bench =
         eeg::analysis::run_benchmark(graph, settings, jobs, sel.channels, reader, variants);

@@ -1,23 +1,24 @@
-export type BlockKind = 'lowpass' | 'fft' | 'normalize';
+export type BlockKind = 'lowpass' | 'normalize' | 'krzywa_erd' | 'mapa_erd';
+
+export type Etap = 'wstepne' | 'wyniki';
 
 export type LowpassParams = {
   cutoffHz: number;
   order: number;
 };
 
-export type FftParams = {
-  windowSize: number;
-  overlap: number;
-};
-
 export type NormalizeParams = {
   method: 'zscore' | 'minmax';
 };
 
-export type BlockParamsByKind = {
-  lowpass: LowpassParams;
-  fft: FftParams;
-  normalize: NormalizeParams;
+export type StftParams = {
+  windowSize: number;
+  overlap: number;
+};
+
+export type Zakres = {
+  fMin: number;
+  fMax: number;
 };
 
 export type PipelineNodeData =
@@ -26,8 +27,9 @@ export type PipelineNodeData =
       label: string;
     }
   | {
-      kind: 'end';
+      kind: 'stft';
       label: string;
+      params: StftParams;
     }
   | {
       kind: 'lowpass';
@@ -35,12 +37,17 @@ export type PipelineNodeData =
       params: LowpassParams;
     }
   | {
-      kind: 'fft';
-      label: string;
-      params: FftParams;
-    }
-  | {
       kind: 'normalize';
       label: string;
       params: NormalizeParams;
+    }
+  | {
+      kind: 'krzywa_erd';
+      label: string;
+      params: Zakres;
+    }
+  | {
+      kind: 'mapa_erd';
+      label: string;
+      params: Zakres;
     };

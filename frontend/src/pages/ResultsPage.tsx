@@ -55,7 +55,9 @@ export function ResultsPage(props: { projectId: string }) {
             <KrzyweErd wynik={wynik} zadanie={zadanie} dane={dane} />
           </div>
 
-          <MapaErdPanel projectId={projectId} wynik={wynik} zadanie={zadanie} wersja={analiza.utworzono} />
+          {wynik.freq.length > 0 ? (
+            <MapaErdPanel projectId={projectId} wynik={wynik} zadanie={zadanie} wersja={analiza.utworzono} />
+          ) : null}
         </>
       ) : null}
     </div>

@@ -78,4 +78,12 @@ std::vector<ChannelSpectrogram> compute_stft_all(const std::vector<ChannelSeries
   return specs;
 }
 
+std::vector<std::size_t> rows_in_range(const std::vector<double>& freq, double f_min, double f_max) {
+  std::vector<std::size_t> rows;
+  for (std::size_t f = 0; f < freq.size(); ++f) {
+    if (freq[f] >= f_min && freq[f] <= f_max) rows.push_back(f);
+  }
+  return rows;
+}
+
 }

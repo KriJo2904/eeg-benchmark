@@ -8,14 +8,18 @@ import ReactFlow, {
   useNodesState,
 } from 'reactflow';
 import type { Connection, Edge, Node, ReactFlowInstance } from 'reactflow';
-import { getBlockDefinition } from './blockRegistry';
+import { getBlockDefinition, jestWstepnym, jestWynikiem } from './blockRegistry';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
-import { USUNIETE_BLOKI, usunBloki, ustawieniaZeStarychBlokow } from './migratePipelineData';
+import {
+  jestStarymZapisem,
+  nowyZapisZeStarego,
+  STFT_ID,
+  type ZapisanaKrawedz,
+  type ZapisanyWezel,
+} from './migratePipelineData';
 import { PipelineInspector } from './PipelineInspector';
 import { PipelineNode } from './PipelineNode';
 import { PipelinePalette } from './PipelinePalette';
-import { PanelUstawienAnalizy } from './PanelUstawienAnalizy';
-import { DOMYSLNE_USTAWIENIA, type UstawieniaAnalizy } from './ustawieniaAnalizy';
 import { getProject, patchProject } from '../projectsApi';
 import type { BlockKind, PipelineNodeData } from './types';
 
@@ -32,35 +36,27 @@ function genId(prefix: string) {
 }
 
 const FIXED_START_ID = 'start';
-const FIXED_END_ID = 'end';
 function isFixedNodeId(id: string) {
-  return id === FIXED_START_ID || id === FIXED_END_ID;
+  return id === FIXED_START_ID || id === STFT_ID;
 }
+
+const ZNANE_RODZAJE = ['start', 'stft', 'lowpass', 'normalize', 'krzywa_erd', 'mapa_erd'];
 
 const nodeTypes = { pipelineNode: PipelineNode };
 function storageKey(projectId: string) {
   return `project.${projectId}.pipeline.v1.autosave`;
 }
 
-type PipelineFileV1 = {
-  version: 1;
-  nodes: Array<{
-    id: string;
-    position: { x: number; y: number };
-    data: PipelineNodeData;
-  }>;
-  edges: Array<{
-    id?: string;
-    source: string;
-    target: string;
-  }>;
-  analysis?: UstawieniaAnalizy;
+type PipelineFile = {
+  version: 1 | 2;
+  nodes: ZapisanyWezel[];
+  edges: ZapisanaKrawedz[];
+  analysis?: { band?: unknown; map?: unknown };
 };
 
-function serializePipeline(nodes: PipelineRfNode[], edges: Edge[], ustawienia: UstawieniaAnalizy): PipelineFileV1 {
+function serializePipeline(nodes: PipelineRfNode[], edges: Edge[]): PipelineFile {
   return {
-    version: 1,
-    analysis: ustawienia,
+    version: 2,
     nodes: nodes.map((n) => ({
       id: n.id,
       position: { x: n.position.x, y: n.position.y },
@@ -70,10 +66,10 @@ function serializePipeline(nodes: PipelineRfNode[], edges: Edge[], ustawienia: U
   };
 }
 
-function isPipelineFileV1(x: unknown): x is PipelineFileV1 {
+function isPipelineFile(x: unknown): x is PipelineFile {
   if (!x || typeof x !== 'object') return false;
   const o = x as Record<string, unknown>;
-  if (o.version !== 1) return false;
+  if (o.version !== 1 && o.version !== 2) return false;
   return Array.isArray(o.nodes) && Array.isArray(o.edges);
 }
 
@@ -88,68 +84,67 @@ function makePipelineEdge(e: { id?: string; source: string; target: string }): E
   };
 }
 
-const DOMYSLNE_BLOKI: Array<{ id: string; kind: BlockKind }> = [
-  { id: 'n1', kind: 'fft' },
-];
+function rodzajWezla(nodes: PipelineRfNode[], id: string) {
+  return nodes.find((n) => n.id === id)?.data.kind;
+}
+
+function moznaPolaczyc(nodes: PipelineRfNode[], edges: Edge[], source: string, target: string): boolean {
+  if (!source || !target || source === target) return false;
+  const zrodlo = rodzajWezla(nodes, source);
+  const cel = rodzajWezla(nodes, target);
+  if (!zrodlo || !cel) return false;
+  if (edges.some((e) => e.target === target)) return false;
+
+  if (jestWynikiem(cel)) return zrodlo === 'stft';
+
+  if (cel !== 'stft' && !jestWstepnym(cel)) return false;
+  if (zrodlo !== 'start' && !jestWstepnym(zrodlo)) return false;
+  if (edges.some((e) => e.source === source)) return false;
+
+  let biezacy: string | undefined = target;
+  while (biezacy) {
+    if (biezacy === source) return false;
+    biezacy = edges.find((e) => e.source === biezacy)?.target;
+  }
+  return true;
+}
 
 const initialNodes: PipelineRfNode[] = [
   { id: FIXED_START_ID, type: 'pipelineNode', position: { x: 80, y: 240 }, data: { kind: 'start', label: 'Start' } },
-  ...DOMYSLNE_BLOKI.map((b, i) => ({
-    id: b.id,
+  {
+    id: STFT_ID,
     type: 'pipelineNode',
-    position: { x: 320 + i * 240, y: 240 },
-    data: getBlockDefinition(b.kind).makeNodeData(),
-  })),
-  { id: FIXED_END_ID, type: 'pipelineNode', position: { x: 320 + DOMYSLNE_BLOKI.length * 240, y: 240 }, data: { kind: 'end', label: 'Koniec' } },
+    position: { x: 420, y: 240 },
+    data: { kind: 'stft', label: 'Spektrogram', params: { windowSize: 128, overlap: 0.9 } },
+  },
+  { id: 'erd', type: 'pipelineNode', position: { x: 760, y: 150 }, data: getBlockDefinition('krzywa_erd').makeNodeData() },
+  { id: 'mapa', type: 'pipelineNode', position: { x: 760, y: 330 }, data: getBlockDefinition('mapa_erd').makeNodeData() },
 ];
 
-const kolejnosc = [FIXED_START_ID, ...DOMYSLNE_BLOKI.map((b) => b.id), FIXED_END_ID];
-const initialEdges: Edge[] = kolejnosc.slice(1).map((id, i) =>
-  makePipelineEdge({ id: `e${i + 1}`, source: kolejnosc[i], target: id }),
-);
+const initialEdges: Edge[] = [
+  makePipelineEdge({ id: 'e1', source: FIXED_START_ID, target: STFT_ID }),
+  makePipelineEdge({ id: 'e2', source: STFT_ID, target: 'erd' }),
+  makePipelineEdge({ id: 'e3', source: STFT_ID, target: 'mapa' }),
+];
 
 function ensureFixedNodes(nextNodes: PipelineRfNode[], nextEdges: Edge[]) {
-  const hasStart = nextNodes.some((n) => n.id === FIXED_START_ID);
-  const hasEnd = nextNodes.some((n) => n.id === FIXED_END_ID);
-
   const outNodes = [...nextNodes];
-  if (!hasStart) {
-    outNodes.unshift({
-      id: FIXED_START_ID,
-      type: 'pipelineNode',
-      position: { x: 80, y: 240 },
-      data: { kind: 'start', label: 'Start' },
-    });
-  }
-  if (!hasEnd) {
-    outNodes.push({
-      id: FIXED_END_ID,
-      type: 'pipelineNode',
-      position: { x: 820, y: 240 },
-      data: { kind: 'end', label: 'Koniec' },
-    });
-  }
+  if (!outNodes.some((n) => n.id === FIXED_START_ID)) outNodes.unshift(initialNodes[0]);
+  if (!outNodes.some((n) => n.id === STFT_ID)) outNodes.push(initialNodes[1]);
 
-  const uzyteZrodla = new Set<string>();
-  const uzyteCele = new Set<string>();
   const outEdges: Edge[] = [];
   for (const e of nextEdges) {
-    if (e.target === FIXED_START_ID || e.source === FIXED_END_ID) continue;
-    if (uzyteZrodla.has(e.source) || uzyteCele.has(e.target)) continue;
-    uzyteZrodla.add(e.source);
-    uzyteCele.add(e.target);
-    outEdges.push(e);
+    if (moznaPolaczyc(outNodes, outEdges, e.source, e.target)) outEdges.push(e);
   }
-
   return { nodes: outNodes, edges: outEdges };
 }
 
-function sciezkaOdStartu(edges: Edge[]): string[] {
+function sciezkaOdStartu(nodes: PipelineRfNode[], edges: Edge[]): string[] {
   const sciezka = [FIXED_START_ID];
   const odwiedzone = new Set(sciezka);
   let biezacy = FIXED_START_ID;
-  while (true) {
-    const dalej = edges.find((e) => e.source === biezacy);
+  while (biezacy !== STFT_ID) {
+    const dalej = edges.find((e) => e.source === biezacy && !jestWynikiem(rodzajWezla(nodes, e.target) ?? 'start'));
     if (!dalej || odwiedzone.has(dalej.target)) break;
     sciezka.push(dalej.target);
     odwiedzone.add(dalej.target);
@@ -158,24 +153,17 @@ function sciezkaOdStartu(edges: Edge[]): string[] {
   return sciezka;
 }
 
-function grafZZapisu(file: PipelineFileV1): {
-  nodes: PipelineRfNode[];
-  edges: Edge[];
-  ustawienia: UstawieniaAnalizy;
-} {
-  const ustawienia = file.analysis ?? ustawieniaZeStarychBlokow(file.nodes);
-  const stripped = usunBloki(
-    file.nodes.map((n) => ({ id: n.id, position: n.position, data: n.data })),
-    file.edges,
-    USUNIETE_BLOKI,
-  );
-  const nodes: PipelineRfNode[] = stripped.nodes.map((n) => ({
+function grafZZapisu(file: PipelineFile): { nodes: PipelineRfNode[]; edges: Edge[] } {
+  const zapis = jestStarymZapisem(file.nodes)
+    ? nowyZapisZeStarego(file.nodes, file.edges, file.analysis)
+    : { nodes: file.nodes.filter((n) => ZNANE_RODZAJE.includes(n.data.kind)), edges: file.edges };
+  const nodes: PipelineRfNode[] = zapis.nodes.map((n) => ({
     id: n.id,
     type: 'pipelineNode',
     position: n.position,
-    data: n.data,
+    data: n.data as PipelineNodeData,
   }));
-  return { ...ensureFixedNodes(nodes, stripped.edges.map(makePipelineEdge)), ustawienia };
+  return ensureFixedNodes(nodes, zapis.edges.map(makePipelineEdge));
 }
 
 export function PipelineBuilder(props: { projectId: string }) {
@@ -191,16 +179,22 @@ export function PipelineBuilder(props: { projectId: string }) {
   const wczytanyProjektRef = useRef<string | null>(null);
   const autosaveTimerRef = useRef<number | null>(null);
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [ustawienia, setUstawienia] = useState<UstawieniaAnalizy>(DOMYSLNE_USTAWIENIA);
   const [canvasMenu, setCanvasMenu] = useState<PipelineCanvasMenu | null>(null);
 
   const sciezka = useMemo(() => {
-    const ids = sciezkaOdStartu(edges);
-    const etykiety = ids.map((id) => nodes.find((n) => n.id === id)?.data.label ?? id);
-    const doKonca = ids[ids.length - 1] === FIXED_END_ID;
-    const poza = nodes.filter((n) => !isFixedNodeId(n.id) && !ids.includes(n.id)).length;
-    return { etykiety, doKonca, poza };
+    const ids = sciezkaOdStartu(nodes, edges);
+    const etykieta = (id: string) => nodes.find((n) => n.id === id)?.data.label ?? id;
+    const doStft = ids[ids.length - 1] === STFT_ID;
+    const wyniki = edges.filter((e) => e.source === STFT_ID).map((e) => e.target);
+    const maKrzywa = wyniki.some((id) => rodzajWezla(nodes, id) === 'krzywa_erd');
+    const poza = nodes.filter((n) => !isFixedNodeId(n.id) && !ids.includes(n.id) && !wyniki.includes(n.id)).length;
+    return { wstepne: ids.map(etykieta), wyniki: wyniki.map(etykieta), doStft, maKrzywa, poza };
   }, [edges, nodes]);
+
+  const zajeteWyniki = useMemo(
+    () => nodes.map((n) => n.data.kind).filter((k): k is BlockKind => jestWynikiem(k)),
+    [nodes],
+  );
 
   const selected = useMemo(() => {
     if (!selectedId) return null;
@@ -210,20 +204,8 @@ export function PipelineBuilder(props: { projectId: string }) {
   }, [nodes, selectedId]);
 
   const isValidConnection = useCallback(
-    (connection: Connection) => {
-      const { source, target } = connection;
-      if (!source || !target || source === target) return false;
-      if (edges.some((e) => e.source === source)) return false;
-      if (edges.some((e) => e.target === target)) return false;
-
-      let biezacy: string | undefined = target;
-      while (biezacy) {
-        if (biezacy === source) return false;
-        biezacy = edges.find((e) => e.source === biezacy)?.target;
-      }
-      return true;
-    },
-    [edges],
+    (connection: Connection) => moznaPolaczyc(nodes, edges, connection.source ?? '', connection.target ?? ''),
+    [edges, nodes],
   );
 
   const onConnect = useCallback(
@@ -306,7 +288,7 @@ export function PipelineBuilder(props: { projectId: string }) {
     (id: string) => {
       if (isFixedNodeId(id)) return;
       const n = nodes.find((x) => x.id === id);
-      if (!n) return;
+      if (!n || jestWynikiem(n.data.kind)) return;
       const nextId = genId('node');
       setNodes((ns) => [
         ...ns,
@@ -322,16 +304,16 @@ export function PipelineBuilder(props: { projectId: string }) {
   );
 
   const onSaveToFile = useCallback(() => {
-    const payload = serializePipeline(nodes, edges, ustawienia);
+    const payload = serializePipeline(nodes, edges);
     const text = JSON.stringify(payload, null, 2);
     const blob = new Blob([text], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `pipeline.${projectId}.v1.json`;
+    a.download = `pipeline.${projectId}.v2.json`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
-  }, [edges, nodes, projectId, ustawienia]);
+  }, [edges, nodes, projectId]);
 
   const onPickFile = useCallback(() => {
     if (!window.confirm('Czy na pewno wczytać pipeline z pliku? Bieżący stan zostanie zastąpiony.')) return;
@@ -342,13 +324,12 @@ export function PipelineBuilder(props: { projectId: string }) {
     async (file: File) => {
       const text = await file.text();
       const parsed = JSON.parse(text) as unknown;
-      if (!isPipelineFileV1(parsed)) {
-        throw new Error('Niepoprawny plik pipeline (oczekiwano version: 1).');
+      if (!isPipelineFile(parsed)) {
+        throw new Error('Niepoprawny plik pipeline (oczekiwano version: 1 albo 2).');
       }
 
       const graf = grafZZapisu(parsed);
       setNodes(graf.nodes);
-      setUstawienia(graf.ustawienia);
       setEdges(graf.edges);
       setSelectedId(null);
       setFileError(null);
@@ -370,10 +351,9 @@ export function PipelineBuilder(props: { projectId: string }) {
       .then((r) => {
         if (!alive) return;
         const pip = r.project.pipeline;
-        if (pip && isPipelineFileV1(pip)) {
+        if (pip && isPipelineFile(pip)) {
           const graf = grafZZapisu(pip);
           setNodes(graf.nodes);
-          setUstawienia(graf.ustawienia);
           setEdges(graf.edges);
           setRemoteStatus('synced');
           wczytanyProjektRef.current = projectId;
@@ -389,14 +369,13 @@ export function PipelineBuilder(props: { projectId: string }) {
             return;
           }
           const parsed = JSON.parse(raw) as unknown;
-          if (!isPipelineFileV1(parsed)) {
+          if (!isPipelineFile(parsed)) {
             setRemoteStatus('idle');
             wczytanyProjektRef.current = projectId;
             return;
           }
           const graf = grafZZapisu(parsed);
           setNodes(graf.nodes);
-          setUstawienia(graf.ustawienia);
           setEdges(graf.edges);
           setRemoteStatus('idle');
           wczytanyProjektRef.current = projectId;
@@ -421,7 +400,7 @@ export function PipelineBuilder(props: { projectId: string }) {
     if (wczytanyProjektRef.current !== projectId) return;
     if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = window.setTimeout(() => {
-      const payload = serializePipeline(nodes, edges, ustawienia);
+      const payload = serializePipeline(nodes, edges);
       try {
         localStorage.setItem(storageKey(projectId), JSON.stringify(payload));
       } catch (e) {
@@ -442,7 +421,7 @@ export function PipelineBuilder(props: { projectId: string }) {
     return () => {
       if (autosaveTimerRef.current) window.clearTimeout(autosaveTimerRef.current);
     };
-  }, [edges, nodes, projectId, ustawienia]);
+  }, [edges, nodes, projectId]);
 
   const confirmClearConnections = useCallback(() => {
     if (!edges.length) return;
@@ -465,10 +444,7 @@ export function PipelineBuilder(props: { projectId: string }) {
         inspectorOpen ? 'lg:grid-cols-[340px_1fr_360px]' : 'lg:grid-cols-[340px_1fr_44px]',
       ].join(' ')}
     >
-      <div className="space-y-4">
-        <PipelinePalette onAddBlock={onAddBlock} />
-        <PanelUstawienAnalizy ustawienia={ustawienia} onChange={setUstawienia} />
-      </div>
+      <PipelinePalette onAddBlock={onAddBlock} zajete={zajeteWyniki} />
 
       <div
         className={['min-w-0 border border-border bg-surface', inspectorOpen ? 'lg:border-r-0' : ''].join(' ')}
@@ -477,9 +453,12 @@ export function PipelineBuilder(props: { projectId: string }) {
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-text">Plansza</h2>
             <p className="mt-0.5 truncate text-[11px] text-muted">
-              {sciezka.etykiety.join(' › ')}
-              {sciezka.doKonca ? '' : ' (nie dochodzi do Koniec)'}
-              {sciezka.poza > 0 ? ` · ${sciezka.poza} ${sciezka.poza === 1 ? 'blok poza ścieżką' : 'bloki poza ścieżką'}` : ''}
+              <span className="text-text">Wstępne:</span> {sciezka.wstepne.join(' › ')}
+              {sciezka.doStft ? '' : ' (nie dochodzi do Spektrogramu)'}
+              {' · '}
+              <span className="text-text">Wyniki:</span> {sciezka.wyniki.length ? sciezka.wyniki.join(', ') : 'brak'}
+              {sciezka.maKrzywa ? '' : ' (brak Krzywej ERD)'}
+              {sciezka.poza > 0 ? ` · ${sciezka.poza} ${sciezka.poza === 1 ? 'blok niepodłączony' : 'bloki niepodłączone'}` : ''}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -557,9 +536,9 @@ export function PipelineBuilder(props: { projectId: string }) {
                 nodeColor={(n) => {
                   const d = n.data as PipelineNodeData | undefined;
                   if (!d) return '#9fb2c6';
-                  if (d.kind === 'fft') return '#1e66d0';
-                  if (d.kind === 'lowpass') return '#027a48';
-                  if (d.kind === 'normalize') return '#c11574';
+                  if (d.kind === 'stft') return '#1e66d0';
+                  if (jestWstepnym(d.kind)) return '#027a48';
+                  if (jestWynikiem(d.kind)) return '#c11574';
                   return '#9fb2c6';
                 }}
               />
@@ -572,14 +551,16 @@ export function PipelineBuilder(props: { projectId: string }) {
               title="Akcje"
               onClose={() => setCanvasMenu(null)}
             >
-              <ContextMenuItem
-                onClick={() => {
-                  onDuplicateNode(canvasMenu.nodeId);
-                  setCanvasMenu(null);
-                }}
-              >
-                Duplikuj blok
-              </ContextMenuItem>
+              {jestWstepnym(rodzajWezla(nodes, canvasMenu.nodeId) ?? 'start') ? (
+                <ContextMenuItem
+                  onClick={() => {
+                    onDuplicateNode(canvasMenu.nodeId);
+                    setCanvasMenu(null);
+                  }}
+                >
+                  Duplikuj blok
+                </ContextMenuItem>
+              ) : null}
               <ContextMenuItem
                 onClick={() => {
                   if (!window.confirm('Czy na pewno usunąć połączenia tego bloku?')) return;

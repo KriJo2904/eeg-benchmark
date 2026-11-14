@@ -1,10 +1,39 @@
-import type { PipelineNodeData } from './types';
+import type { PipelineNodeData, Zakres } from './types';
 
 function clamp(x: number, a: number, b: number) {
   return Math.max(a, Math.min(b, x));
 }
 
 const POLE = 'mt-2 w-full border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-accent';
+
+const PRESETY_PASMA: Array<{ nazwa: string; zakres: Zakres }> = [
+  { nazwa: 'μ 8–13', zakres: { fMin: 8, fMax: 13 } },
+  { nazwa: 'β 13–30', zakres: { fMin: 13, fMax: 30 } },
+  { nazwa: 'θ 4–8', zakres: { fMin: 4, fMax: 8 } },
+  { nazwa: 'γ 30–80', zakres: { fMin: 30, fMax: 80 } },
+];
+
+function PolaZakresu(props: { zakres: Zakres; onChange: (z: Zakres) => void }) {
+  const { zakres, onChange } = props;
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {(['fMin', 'fMax'] as const).map((pole) => (
+        <div key={pole}>
+          <label className="block text-xs font-medium text-muted">{pole === 'fMin' ? 'od [Hz]' : 'do [Hz]'}</label>
+          <input
+            className={POLE}
+            type="number"
+            step="0.5"
+            min={0}
+            max={80}
+            value={zakres[pole]}
+            onChange={(e) => onChange({ ...zakres, [pole]: Number(e.target.value) })}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function PipelineInspector(props: {
   selected: { id: string; data: PipelineNodeData } | null;
@@ -45,7 +74,7 @@ export function PipelineInspector(props: {
 
 function FormularzBloku(props: { data: PipelineNodeData; zmien: (next: PipelineNodeData) => void }) {
   const { data, zmien } = props;
-  const isFixed = data.kind === 'start' || data.kind === 'end';
+  const isFixed = data.kind === 'start';
 
   return (
     <div className="space-y-4">
@@ -57,7 +86,7 @@ function FormularzBloku(props: { data: PipelineNodeData; zmien: (next: PipelineN
           disabled={isFixed}
           onChange={(e) => zmien({ ...data, label: e.target.value } as PipelineNodeData)}
         />
-        {isFixed ? <div className="mt-2 text-xs text-muted">Start i Koniec są stałe, nie mają parametrów.</div> : null}
+        {isFixed ? <div className="mt-2 text-xs text-muted">Start nie ma parametrów.</div> : null}
       </div>
 
       {data.kind === 'lowpass' ? (
@@ -88,10 +117,10 @@ function FormularzBloku(props: { data: PipelineNodeData; zmien: (next: PipelineN
         </div>
       ) : null}
 
-      {data.kind === 'fft' ? (
+      {data.kind === 'stft' ? (
         <>
           <div>
-            <label className="block text-xs font-medium text-muted">windowSize</label>
+            <label className="block text-xs font-medium text-muted">okno [próbki]</label>
             <input
               className={POLE}
               type="number"
@@ -106,7 +135,7 @@ function FormularzBloku(props: { data: PipelineNodeData; zmien: (next: PipelineN
           </div>
           <div>
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-medium text-muted">overlap</label>
+              <label className="block text-xs font-medium text-muted">nakładanie okien</label>
               <span className="text-xs text-muted">{(data.params.overlap * 100).toFixed(0)}%</span>
             </div>
             <input
@@ -136,6 +165,28 @@ function FormularzBloku(props: { data: PipelineNodeData; zmien: (next: PipelineN
             <option value="minmax">min-max</option>
           </select>
         </div>
+      ) : null}
+
+      {data.kind === 'krzywa_erd' ? (
+        <div className="space-y-3">
+          <PolaZakresu zakres={data.params} onChange={(params) => zmien({ ...data, params })} />
+          <div className="flex flex-wrap gap-2">
+            {PRESETY_PASMA.map((p) => (
+              <button
+                key={p.nazwa}
+                type="button"
+                onClick={() => zmien({ ...data, params: p.zakres })}
+                className="border border-border bg-surface px-2.5 py-1 text-[11px] font-medium text-text hover:bg-bg"
+              >
+                {p.nazwa}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {data.kind === 'mapa_erd' ? (
+        <PolaZakresu zakres={data.params} onChange={(params) => zmien({ ...data, params })} />
       ) : null}
     </div>
   );

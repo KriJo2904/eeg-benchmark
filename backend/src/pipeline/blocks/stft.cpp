@@ -5,9 +5,8 @@
 
 namespace eeg::pipeline {
 
-class FftBlock final : public Block {
+class StftBlock final : public Block {
  public:
-
   void process(const nlohmann::json& params, Signal& out) override {
     const int window_size = std::max(2, params.value("windowSize", 128));
     const double overlap = params.value("overlap", 0.9);
@@ -16,6 +15,6 @@ class FftBlock final : public Block {
   }
 };
 
-EEG_REGISTER_BLOCK("fft", FftBlock)
+EEG_REGISTER_BLOCK("stft", StftBlock)
 
 }

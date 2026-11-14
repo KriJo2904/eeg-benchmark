@@ -28,6 +28,10 @@ struct ChannelSpectrogram {
 struct Signal {
   std::vector<ChannelSeries> channels;
   std::vector<ChannelSpectrogram> spectrograms;
+
+  std::vector<std::vector<double>> band_power;
+  std::vector<double> map_freq_hz;
+  std::vector<std::vector<double>> map_power;
 };
 
 class Block {
