@@ -69,7 +69,7 @@ function Statystyki({ analiza }: { analiza: AnalizaState }) {
     <div className="grid gap-4 border-t border-border px-4 py-3 text-xs lg:grid-cols-2">
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
         <dt className="text-muted">Ostatnia analiza</dt>
-        <dd className="text-text">{analiza.utworzono ? new Date(analiza.utworzono).toLocaleString('pl-PL') : '—'}</dd>
+        <dd className="text-text">{analiza.utworzono ? new Date(analiza.utworzono).toLocaleString('pl-PL') : 'brak'}</dd>
         <dt className="text-muted">Rekordy</dt>
         <dd className="text-text">
           {s.recordsUsed} z {s.recordsTotal}

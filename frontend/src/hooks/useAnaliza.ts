@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { backendUrl } from '../polaczenie';
 import { getAnalysis } from '../projectsApi';
 import type { PodsumowanieAnalizy } from '../results/analizaTypes';
 
@@ -60,7 +61,7 @@ export function useAnaliza(projectId: string): AnalizaState {
     startRef.current = performance.now();
     setFaza('liczenie');
 
-    const es = new EventSource(`/api/projects/${encodeURIComponent(projectId)}/analysis/stream`);
+    const es = new EventSource(backendUrl(`/api/projects/${encodeURIComponent(projectId)}/analysis/stream`));
     zrodloRef.current = es;
     const dane = (ev: Event) => JSON.parse((ev as MessageEvent).data);
 

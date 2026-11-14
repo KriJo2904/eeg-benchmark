@@ -8,7 +8,7 @@ export function PipelinePage(props: { wybor: WyborState; projectId: string }) {
   const parts: Array<{ k: string; v: string }> = [
     { k: 'Badani', v: String(wybor.wybraniBadani.length) },
     { k: 'Rekordy EDF', v: String(wybor.liczbaRekordow) },
-    { k: 'Elektrody', v: wybor.wybor.channels.map((c) => c.replace(/\.+$/, '')).join(', ') || '—' },
+    { k: 'Elektrody', v: wybor.wybor.channels.map((c) => c.replace(/\.+$/, '')).join(', ') || 'brak' },
   ];
 
   return (

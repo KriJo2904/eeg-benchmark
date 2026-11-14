@@ -12,10 +12,10 @@ static std::string getenv_str(const char* key) {
 
 Config load_config_from_env() {
   Config cfg;
-  cfg.dataset_root = getenv_str("EEG_DATASET_ROOT");
+  cfg.data_dir = getenv_str("EEG_DATA_DIR");
 
-  if (cfg.dataset_root.empty()) {
-    cfg.dataset_root = (std::filesystem::current_path() / "data" / "eegmmidb").string();
+  if (cfg.data_dir.empty()) {
+    cfg.data_dir = (std::filesystem::current_path() / "dane").string();
   }
 
   if (auto port_s = getenv_str("PORT"); !port_s.empty()) {

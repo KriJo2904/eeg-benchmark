@@ -42,7 +42,7 @@ PreparedAnalysis prepare(eeg::AppContext& ctx, const std::string& project_id,
   p.graph = eeg::pipeline::parse_pipeline(data.pipeline);
   p.settings = eeg::analysis::parse_settings(data.pipeline);
   p.selection = eeg::analysis::parse_selection(data.data_selection);
-  p.jobs = eeg::analysis::resolve_records(p.selection, ctx.index, max_subjects);
+  p.jobs = eeg::analysis::resolve_records(p.selection, *ctx.data.dataset(data.dataset), max_subjects);
   return p;
 }
 

@@ -16,7 +16,7 @@ RUN cmake -S /src/backend -B /src/backend/build -DCMAKE_BUILD_TYPE=Release \
 
 FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -26,7 +26,7 @@ COPY --from=build /src/backend/build/edf_dump /app/edf_dump
 EXPOSE 8080
 ENV HOST=0.0.0.0
 ENV PORT=8080
-ENV EEG_DATASET_ROOT=/data/eegmmidb
+ENV EEG_DATA_DIR=/data/dane
 
 CMD ["/app/eeg_server"]
 

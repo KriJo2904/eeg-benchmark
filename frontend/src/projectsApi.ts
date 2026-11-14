@@ -3,6 +3,7 @@ import type { MapaErd, PodsumowanieAnalizy, WynikBadanego } from './results/anal
 export type Project = {
   _id: string;
   name: string;
+  dataset?: string;
   createdAt: string;
   updatedAt: string;
   pipeline?: unknown;
@@ -36,7 +37,7 @@ export async function getProject(id: string): Promise<{ project: Project }> {
 
 export async function patchProject(
   id: string,
-  patch: { pipeline?: unknown; dataSelection?: unknown },
+  patch: { pipeline?: unknown; dataSelection?: unknown; dataset?: string },
 ): Promise<{ project: Project }> {
   return http(`/projects-api/projects/${encodeURIComponent(id)}`, {
     method: 'PATCH',

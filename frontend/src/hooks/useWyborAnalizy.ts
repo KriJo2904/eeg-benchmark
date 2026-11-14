@@ -24,7 +24,7 @@ export type WyborState = {
   blad: string | null;
 };
 
-export function useWyborAnalizy(projectId: string): WyborState {
+export function useWyborAnalizy(projectId: string, zbior: string): WyborState {
   const [wybor, setWybor] = useState<WyborAnalizy>(PUSTY_WYBOR);
   const [wszyscyBadani, setWszyscyBadani] = useState<string[]>([]);
   const [zadania, setZadania] = useState<TypZadania[]>([]);
@@ -40,9 +40,9 @@ export function useWyborAnalizy(projectId: string): WyborState {
     zmienionyPrzezUzytkownika.current = false;
 
     (async () => {
-      const [w, s, t] = await Promise.all([wczytajWybor(projectId), listSubjects(), listTasks()]);
-      const rekordy = s.subjects.length ? await listSubjectRecords(s.subjects[0]) : { records: [] };
-      const meta = rekordy.records.length ? await getMetadata(rekordy.records[0].id) : null;
+      const [w, s, t] = await Promise.all([wczytajWybor(projectId), listSubjects(zbior), listTasks()]);
+      const rekordy = s.subjects.length ? await listSubjectRecords(zbior, s.subjects[0]) : { records: [] };
+      const meta = rekordy.records.length ? await getMetadata(zbior, rekordy.records[0].id) : null;
       if (!alive) return;
       setWybor(w);
       setWszyscyBadani(s.subjects);
@@ -56,7 +56,7 @@ export function useWyborAnalizy(projectId: string): WyborState {
     return () => {
       alive = false;
     };
-  }, [projectId]);
+  }, [projectId, zbior]);
 
   useEffect(() => {
     if (!zaladowany || !zmienionyPrzezUzytkownika.current) return;

@@ -1,5 +1,6 @@
 server {
   listen 80;
+  resolver 127.0.0.11 valid=10s ipv6=off;
 
   location / {
     root /usr/share/nginx/html;
@@ -7,11 +8,14 @@ server {
   }
 
   location /api/ {
-    proxy_pass http://backend:8080;
+    set $backend "${BACKEND_URL}";
+    proxy_pass $backend;
+    proxy_http_version 1.1;
+    proxy_buffering off;
+    proxy_read_timeout 1h;
   }
 
   location /projects-api/ {
     proxy_pass http://projects-api:3000/;
   }
 }
-

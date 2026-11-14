@@ -5,6 +5,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <iostream>
+
 namespace eeg {
 
 using json = nlohmann::json;
@@ -31,7 +33,16 @@ int HttpServer::run() {
 
   api::register_all(svr, ctx_);
 
-  return svr.listen(ctx_.cfg.host, ctx_.cfg.port) ? 0 : 1;
+  std::cout << "eeg_server: http://" << ctx_.cfg.host << ":" << ctx_.cfg.port << "\n"
+            << "  dane:         " << ctx_.data.root().string() << "\n"
+            << "  projects-api: " << ctx_.cfg.projects_api_url << std::endl;
+
+  if (!svr.listen(ctx_.cfg.host, ctx_.cfg.port)) {
+    std::cerr << "Nie udało się nasłuchiwać na " << ctx_.cfg.host << ":" << ctx_.cfg.port
+              << " (port zajęty?)\n";
+    return 1;
+  }
+  return 0;
 }
 
 }

@@ -8,7 +8,6 @@ int main() {
   try {
     auto cfg = eeg::load_config_from_env();
     eeg::AppContext ctx(std::move(cfg));
-    ctx.index.scan();
 
     eeg::HttpServer server(ctx);
     return server.run();

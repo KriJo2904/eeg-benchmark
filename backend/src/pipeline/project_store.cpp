@@ -35,6 +35,10 @@ ProjectData ProjectStore::fetch_project_data(const std::string& project_id) cons
   ProjectData data;
   data.pipeline = project["pipeline"];
   data.data_selection = project.contains("dataSelection") ? project["dataSelection"] : nlohmann::json();
+  if (project.contains("dataset") && project["dataset"].is_string()) data.dataset = project["dataset"].get<std::string>();
+  if (data.dataset.empty()) {
+    throw std::runtime_error("Projekt nie ma wybranego zbioru danych.");
+  }
   return data;
 }
 

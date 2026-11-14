@@ -633,7 +633,7 @@ export function PipelineBuilder(props: { projectId: string }) {
                   ? 'zapisano w bazie'
                   : remoteStatus === 'error'
                     ? 'błąd zapisu'
-                    : '—'}
+                    : 'brak'}
             </span>
             {remoteError ? <span className="ml-2 text-danger">{remoteError}</span> : null}
             {fileError ? <span className="ml-2 text-danger">{fileError}</span> : null}

@@ -5,6 +5,8 @@
 
 # ===== Datasets / large files =====
 eegmmidb/
+backend/dane/
+*.zip
 
 # ===== Frontend (Vite/Node) =====
 node_modules/

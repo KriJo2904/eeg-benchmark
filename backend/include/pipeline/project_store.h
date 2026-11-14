@@ -9,6 +9,7 @@ namespace eeg::pipeline {
 struct ProjectData {
   nlohmann::json pipeline;
   nlohmann::json data_selection;
+  std::string dataset;
 };
 
 class ProjectStore {

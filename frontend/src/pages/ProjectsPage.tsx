@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PolaczenieBackendu } from '../components/PolaczenieBackendu';
+import { usePolaczenie } from '../hooks/usePolaczenie';
 import { createProject, listProjects, type Project } from '../projectsApi';
 
 function formatDate(iso: string) {
@@ -15,8 +17,8 @@ function formatDate(iso: string) {
 function ProjectCard(props: { project: Project; onOpen: () => void }) {
   const { project, onOpen } = props;
   const ds = project.dataSelection as { subjects?: unknown; channels?: unknown } | undefined;
-  const badani = ds?.subjects === 'all' ? 'wszyscy' : Array.isArray(ds?.subjects) ? String(ds.subjects.length) : '—';
-  const elektrody = Array.isArray(ds?.channels) ? String(ds.channels.length) : '—';
+  const badani = ds?.subjects === 'all' ? 'wszyscy' : Array.isArray(ds?.subjects) ? String(ds.subjects.length) : 'brak';
+  const elektrody = Array.isArray(ds?.channels) ? String(ds.channels.length) : 'brak';
   const hasPipeline = Boolean(project.pipeline);
 
   return (
@@ -63,6 +65,11 @@ export function ProjectsPage() {
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const polaczenie = usePolaczenie();
+
+  useEffect(() => {
+    document.title = 'Projekty · Analiza EEG';
+  }, []);
 
   useEffect(() => {
     listProjects()
@@ -102,13 +109,16 @@ export function ProjectsPage() {
               {loading ? 'Ładowanie…' : `${items.length} projekt${items.length === 1 ? '' : items.length < 5 ? 'y' : 'ów'}`}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => setShowForm((v) => !v)}
-            className="border border-border bg-surface px-3 py-2 text-xs font-semibold text-text hover:bg-bg transition-colors"
-          >
-            + Nowy projekt
-          </button>
+          <div className="flex items-center gap-2">
+            <PolaczenieBackendu polaczenie={polaczenie} />
+            <button
+              type="button"
+              onClick={() => setShowForm((v) => !v)}
+              className="border border-border bg-surface px-3 py-2 text-xs font-semibold text-text hover:bg-bg transition-colors"
+            >
+              + Nowy projekt
+            </button>
+          </div>
         </div>
       </header>
 

@@ -5,12 +5,30 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <memory>
 
 namespace eeg::api {
 using json = nlohmann::json;
 
+static std::shared_ptr<const DatasetIndex> dataset_or_error(const httplib::Request& req, httplib::Response& res,
+                                                            AppContext& ctx) {
+  const auto name = req.get_param_value("dataset");
+  if (name.empty()) {
+    json_error(res, 400, "Nie wybrano zbioru danych.");
+    return nullptr;
+  }
+  try {
+    return ctx.data.dataset(name);
+  } catch (const std::exception& e) {
+    json_error(res, 404, e.what());
+    return nullptr;
+  }
+}
+
 static std::filesystem::path resolve_or_404(const httplib::Request& req, httplib::Response& res, AppContext& ctx) {
-  auto path = ctx.index.resolve_path(req.matches[1].str());
+  auto index = dataset_or_error(req, res, ctx);
+  if (!index) return {};
+  auto path = index->resolve_path(req.matches[1].str());
   if (path.empty() || !std::filesystem::exists(path)) {
     json_error(res, 404, "record not found");
     return {};
@@ -24,13 +42,17 @@ static json ref_json(const eeg::RecordRef& r) {
 
 void register_records(httplib::Server& svr, AppContext& ctx) {
 
-  svr.Get("/api/subjects", [&ctx](const httplib::Request&, httplib::Response& res) {
-    json_ok(res, json{{"subjects", ctx.index.list_subjects()}});
+  svr.Get("/api/subjects", [&ctx](const httplib::Request& req, httplib::Response& res) {
+    auto index = dataset_or_error(req, res, ctx);
+    if (!index) return;
+    json_ok(res, json{{"subjects", index->list_subjects()}});
   });
 
   svr.Get(R"(/api/subjects/(S\d{3})/records)", [&ctx](const httplib::Request& req, httplib::Response& res) {
+    auto index = dataset_or_error(req, res, ctx);
+    if (!index) return;
     auto sid = req.matches[1].str();
-    auto recs = ctx.index.list_records_for_subject(sid);
+    auto recs = index->list_records_for_subject(sid);
     json arr = json::array();
     for (const auto& r : recs) arr.push_back(ref_json(r));
     json_ok(res, json{{"subject", sid}, {"records", arr}});

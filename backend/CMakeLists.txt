@@ -66,8 +66,11 @@ endif()
 # --- Server library (HTTP + API routes) ---
 add_library(eeg_server_lib STATIC
   src/config.cpp
+  src/data_store.cpp
+  src/downloads.cpp
   src/http_server.cpp
   src/api/api.cpp
+  src/api/api_files.cpp
   src/api/api_records.cpp
   src/api/api_pipeline.cpp
   src/pipeline/block_registry.cpp

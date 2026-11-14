@@ -1,20 +1,7 @@
+# Maszyna z aplikacją: baza (Mongo), projects-api i frontend.
+# Backend C++ działa natywnie na drugiej maszynie (start-backend.sh).
+# Uruchomienie: ./start-aplikacja.sh
 services:
-  backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-    environment:
-      HOST: 0.0.0.0
-      PORT: 8080
-      EEG_DATASET_ROOT: /data/eegmmidb
-      PROJECTS_API_URL: http://projects-api:3000
-    volumes:
-      - "./backend/eegmmidb:/data/eegmmidb:ro"
-    ports:
-      - "8080:8080"
-    depends_on:
-      - projects-api
-
   mongo:
     image: mongo:7
     restart: unless-stopped
@@ -23,12 +10,13 @@ services:
     volumes:
       - mongo_data:/data/db
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
 
   projects-api:
     build:
       context: .
       dockerfile: projects-api/Dockerfile
+    restart: unless-stopped
     environment:
       PORT: 3000
       MONGO_URL: mongodb://mongo:27017/eeg_workspace
@@ -41,12 +29,11 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+    restart: unless-stopped
     depends_on:
-      - backend
       - projects-api
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
 
 volumes:
   mongo_data:
-

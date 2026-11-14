@@ -8,7 +8,7 @@ struct Config {
   std::string host = "127.0.0.1";
   int port = 8080;
 
-  std::string dataset_root;
+  std::string data_dir;
 
   std::string projects_api_url = "http://127.0.0.1:3000";
 };

@@ -8,6 +8,7 @@ const MONGO_URL = process.env.MONGO_URL || 'mongodb://127.0.0.1:27017/eeg_worksp
 const ProjectSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
+    dataset: { type: String, default: '' },
     dataSelection: mongoose.Schema.Types.Mixed,
     pipeline: mongoose.Schema.Types.Mixed,
   },
@@ -70,6 +71,7 @@ async function main() {
     if (patch.name !== undefined) $set.name = String(patch.name).trim();
     if (patch.dataSelection !== undefined) $set.dataSelection = patch.dataSelection;
     if (patch.pipeline !== undefined) $set.pipeline = patch.pipeline;
+    if (patch.dataset !== undefined) $set.dataset = String(patch.dataset);
     const project = await Project.findByIdAndUpdate(req.params.id, { $set }, { new: true }).lean();
     if (!project) return res.status(404).send('not found');
     res.json({ project });

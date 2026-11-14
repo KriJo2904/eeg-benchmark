@@ -37,7 +37,7 @@ export type EegState = {
   loadWindow: () => Promise<void>;
 };
 
-export function useEegData(projectId: string): EegState {
+export function useEegData(projectId: string, zbior: string): EegState {
   const [subjects, setSubjects] = useState<string[]>([]);
   const [subjectId, setSubjectId] = useState<string>('');
   const [records, setRecords] = useState<RecordRef[]>([]);
@@ -64,7 +64,7 @@ export function useEegData(projectId: string): EegState {
     let alive = true;
     setError(null);
     setBusy('Ładowanie pacjentów…');
-    listSubjects()
+    listSubjects(zbior)
       .then((s) => {
         if (!alive) return;
         setSubjects(s.subjects);
@@ -80,7 +80,7 @@ export function useEegData(projectId: string): EegState {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [zbior]);
 
   useLayoutEffect(() => {
     if (!projectId) return;
@@ -117,7 +117,7 @@ export function useEegData(projectId: string): EegState {
           return;
         }
 
-        const recRes = await listSubjectRecords(pickSubject);
+        const recRes = await listSubjectRecords(zbior, pickSubject);
         if (cancelled) return;
         const recs = recRes.records;
 
@@ -133,13 +133,13 @@ export function useEegData(projectId: string): EegState {
           return;
         }
 
-        const m = await getMetadata(pickRecord);
+        const m = await getMetadata(zbior, pickRecord);
         if (cancelled) return;
 
         const defaultLabel = firstEegLabel(m);
         const pickFromDs =
           ds?.channel && m.channels.some((c) => c.label === ds.channel) ? ds.channel : defaultLabel;
-        const ev = await getEvents(pickRecord);
+        const ev = await getEvents(zbior, pickRecord);
         if (cancelled) return;
 
         setSubjectId(pickSubject);
@@ -164,7 +164,7 @@ export function useEegData(projectId: string): EegState {
     return () => {
       cancelled = true;
     };
-  }, [projectId, subjects]);
+  }, [zbior, projectId, subjects]);
 
   useEffect(() => {
     if (!subjectId || restoreLockRef.current) return;
@@ -178,7 +178,7 @@ export function useEegData(projectId: string): EegState {
     setSamples([]);
     setSampleRateHz(0);
 
-    listSubjectRecords(subjectId)
+    listSubjectRecords(zbior, subjectId)
       .then((r) => {
         if (!alive) return;
         setRecords(r.records);
@@ -196,7 +196,7 @@ export function useEegData(projectId: string): EegState {
     return () => {
       alive = false;
     };
-  }, [subjectId]);
+  }, [zbior, subjectId]);
 
   useEffect(() => {
     if (!recordId || restoreLockRef.current) return;
@@ -208,7 +208,7 @@ export function useEegData(projectId: string): EegState {
     setSamples([]);
     setSampleRateHz(0);
 
-    getMetadata(recordId)
+    getMetadata(zbior, recordId)
       .then((m) => {
         if (!alive) return;
         setMetadata(m);
@@ -217,7 +217,7 @@ export function useEegData(projectId: string): EegState {
         setT0(0);
         setT1(Math.min(10, m.durationSec || 10));
       })
-      .then(() => getEvents(recordId))
+      .then(() => getEvents(zbior, recordId))
       .then((ev) => {
         if (!alive) return;
         setEvents(ev.events ?? []);
@@ -234,7 +234,7 @@ export function useEegData(projectId: string): EegState {
     return () => {
       alive = false;
     };
-  }, [recordId]);
+  }, [zbior, recordId]);
 
   useEffect(() => {
     if (!projectId || !recordId) return;
@@ -252,7 +252,7 @@ export function useEegData(projectId: string): EegState {
     setError(null);
     setBusy('Ładowanie okna…');
     try {
-      const w = await getWindow({ id: recordId, channel: previewChannel, t0, t1, decimate });
+      const w = await getWindow({ zbior, id: recordId, channel: previewChannel, t0, t1, decimate });
       setSamples(w.samples);
       setSampleRateHz(w.sampleRateHz / (w.decimate || 1));
     } catch (e: unknown) {
@@ -262,7 +262,7 @@ export function useEegData(projectId: string): EegState {
     }
   }
 
-  const loadWindowCb = useCallback(loadWindow, [recordId, previewChannel, t0, t1, decimate]);
+  const loadWindowCb = useCallback(loadWindow, [zbior, recordId, previewChannel, t0, t1, decimate]);
 
   const markerTimes = useMemo(
     () => events.map((e) => e.onsetSec).filter((sec) => sec >= t0 && sec <= t1),
