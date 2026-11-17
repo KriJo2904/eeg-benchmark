@@ -8,14 +8,16 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
 
 FetchContent_Declare(nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG        v3.11.3
+  URL      https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+  URL_HASH SHA256=d6c65aca6b1ed68e7a182f4757257b107ae403032760ed6ef121c9d55e81757d
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
 FetchContent_Declare(httplib
-  GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
-  GIT_TAG        v0.18.7
+  URL      https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.18.7.tar.gz
+  URL_HASH SHA256=b7b1e9e4e77565a5a9bc95e761d5df3e7c0e8ca37c90fd78b1b031bc6cb90fc1
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(httplib)
 
@@ -27,8 +29,9 @@ if(NOT TARGET httplib::httplib)
 endif()
 
 FetchContent_Declare(pocketfft
-  GIT_REPOSITORY https://github.com/mreineck/pocketfft.git
-  GIT_TAG        cpp
+  URL      https://github.com/mreineck/pocketfft/archive/4d865cba24359b05b37da4e75aee24498c3b78e7.tar.gz
+  URL_HASH SHA256=db236e44b1020dd0b415e5040ce10d8be604fefb7ce83ec0b32bc0f78975aa2f
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_Populate(pocketfft)
 add_library(pocketfft INTERFACE)
